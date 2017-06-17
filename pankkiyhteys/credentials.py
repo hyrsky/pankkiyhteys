@@ -55,7 +55,7 @@ class Key(object):
     to the bank. This class abstracts storing and usage of the key and certificate
     """
 
-    def __init__(self, key, cert=None, password=None):
+    def __init__(self, key, cert=None, *, password=None):
         """
         Construct key object
 
@@ -204,7 +204,7 @@ def generate():
         backend=default_backend()
     ))
 
-def certify(key, client, transfer_key=None):
+def certify(key, client, *, transfer_key=None):
     """
     Request signed certificate from bank key service
 
