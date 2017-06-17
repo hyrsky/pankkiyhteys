@@ -87,10 +87,22 @@ class CertService(metaclass=abc.ABCMeta):
         """
         pass
 
+class OPWebService(WebService):
+    bank = Bank.Osuuspankki
+
+    def file_list(self, *, status='NEW', start_date=None, end_date=None):
+        pass
+
+    def get_file(self, key):
+        pass
+
+    def upload_file(self, key):
+        pass
+
 class OPCertService(CertService):
     bank = Bank.Osuuspankki
 
-    def certify(self, key):
+    def certify(self, key, *, transfer_key=None):
         tree = E.CertApplicationRequest(
             E.CustomerId(self.client.username),
             E.Timestamp(datetime.utcnow() + 'Z'),

@@ -4,9 +4,20 @@ Communicate with Finnish banks using python
 
 ## Getting Started
 
-This is an experimental version. Keep in mind there may be bugs and
-this software might empty you bank account, eat your cat, etc.
+This is an experimental software. Keep in mind there may be bugs!
 
-You need to make a contract with your bank to use web services.
-Then you get a 10 digit customer id and a 16 digit transfer key
-that are needed by this library.
+You need to make a contract with a bank to use web services. Currently
+not all banks are supported.
+
+## Testing
+
+Install requirements and run
+```
+nosetests --with-coverage --cover-html --cover-html-dir=htmlcov --cover-package=pankkiyhteys --cover-erase 
+```
+
+## Todo
+
+- [ ] API: How to load keys 
+- [ ] Osuuspankki implementation
+- [ ] Testing

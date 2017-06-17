@@ -7,16 +7,16 @@ primitives required by web services.
 Examples:
     Generating new key and get certificate
 
-        client = pankkiyhteys.client(...)
-        key = pankkiyhteys.credentials.generate()
-        key = pankkiyhteys.credentials.certify(key, client, '1234567890123456')
+        client = pankkiyhteys.Client(...)
+        key = pankkiyhteys.Key.generate()
+        key = pankkiyhteys.certify(key, client, '1234567890123456')
 
     Renew certificate that is about to expire
 
         client = pankkiyhteys.client(...)
         key = pankkiyhteys.Key(...)
         if key.valid() and key.valid_duration < datetime.timedelta(days=60)
-            key = pankkiyhteys.credentials.certify(key, client)
+            key = pankkiyhteys.key.certify(key, client)
 
     Save key and certificate to files
 
@@ -25,7 +25,7 @@ Examples:
             certfile.write(key.certificate())
 
 Todo:
-    * Implement pankkiyhteys.credentials.certify()
+    * Implement pankkiyhteys.key.certify()
     * Change all Exceptions to some other exception type
     * Make unit tests
 """
@@ -51,9 +51,24 @@ documentation
 
 class Key(object):
     """
-    Web services requires signed X509 certificate to encrypt and sign messages
-    to the bank. This class abstracts storing and usage of the key and certificate
+    Web services messages require signature from signed X509 certificate
+    aquired from the bank. This class handles storage and usage of the
+    key and the certificate.
     """
+
+    @classmethod
+    def generate(cls):
+        """
+        Generate new RSA key
+
+        Returns:
+            pankkiyhteys.key.Key
+        """
+        return cls(asymmetric.rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=RSA_KEY_SIZE,
+            backend=default_backend()
+        ))
 
     def __init__(self, key, cert=None, *, password=None):
         """
@@ -66,8 +81,8 @@ class Key(object):
 
         Raises
             Exception: If the RSA key is not supported
-            ValueError: If the PEM data could not be decrypted or if its
-                structure could not be decoded successfully.
+            ValueError: If the PEM data could not be decoded successfully or
+                if the key is not RSA key.
             TypeError: If a password was given and the private key was not
                 encrypted. Or if the key was encrypted but no password was
                 supplied.
@@ -79,16 +94,16 @@ class Key(object):
 
         if not isinstance(key, asymmetric.rsa.RSAPrivateKey):
             # Load key from bytes, assume PEM encoded
-            key = serialization.load_pem_private_key(key, password, default_backend)
+            key = serialization.load_pem_private_key(key, password, default_backend())
 
             # PEM files could contain DSA or elliptic curve keys
             if not isinstance(key, asymmetric.rsa.RSAPrivateKey):
-                raise Exception('Key ' + str(type(key)) + ' is not supported')
+                raise ValueError(str(type(key)) + ' is not RSA key')
 
             # Banks might support larger keys(?) and if
             # not now then maybe in the future
-            if key.key_size() < RSA_KEY_SIZE:
-                raise Exception('Key size is not supported')
+            if key.key_size < RSA_KEY_SIZE:
+                raise ValueError('Key size is not supported')
 
         self._private_key = key
 
@@ -140,7 +155,7 @@ class Key(object):
         if self._cert is None:
             raise AttributeError('Key has no certificate')
 
-        return self._certificate.public_bytes(encoding=serialization.Encoding.PEM)
+        return self._cert.public_bytes(encoding=serialization.Encoding.PEM)
 
     def valid(self):
         """
@@ -191,25 +206,12 @@ class Key(object):
 
         return csr
 
-def generate():
-    """
-    Generate new RSA key
-
-    Returns:
-        pankkiyhteys.credentials.Key
-    """
-    return Key(asymmetric.rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=RSA_KEY_SIZE,
-        backend=default_backend()
-    ))
-
 def certify(key, client, *, transfer_key=None):
     """
     Request signed certificate from bank key service
 
     Args:
-        key pankkiyhteys.credentials.Key: The key to certify.
+        key pankkiyhteys.key.Key: Key to certify.
         transfer_key (str): 16 digit one-time key required to prove identity when
             requesting the first certificate. User must register with the bank to
             get this key. Transfer key must be used if no valid certificate is
@@ -220,7 +222,7 @@ def certify(key, client, *, transfer_key=None):
         Exception: Communication error
 
     Returns:
-        pankkiyhteys.credentials.Key: Certified key object. Make sure to
+        pankkiyhteys.key.Key: Certified key object. Make sure to
             save the certificate afterwards
     """
 
@@ -265,5 +267,7 @@ def certify(key, client, *, transfer_key=None):
         raise Exception('')
 
     crt = cert_service.get_certificate(csr)
+
+    print(crt)
 
     return Key()
