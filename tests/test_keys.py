@@ -1,11 +1,14 @@
 import unittest
 
 from datetime import datetime, timedelta
+from lxml.builder import E
+from lxml import etree
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import asymmetric, serialization
 
 import pankkiyhteys
+import utils
 
 class KeyTestSuite(unittest.TestCase):
     def sign_cert(self, key, *,
@@ -73,6 +76,22 @@ class KeyTestSuite(unittest.TestCase):
         # Try to load private key with incorrect password
         with self.assertRaises(ValueError):
             key = pankkiyhteys.Key(protected_private_key, password=b'notmypassword')
+
+    def test_sign(self):
+        """
+        Test if signxml works
+        """
+
+        key = utils.create_test_key()
+        root = key.sign(E.root(E.content('Hello, world!')))
+        print(etree.tostring(root))
+
+        # Validate ApplicationRequest schema
+        with open('tests/xsd/xmldsig-core-schema.xsd') as xsd:
+            schema = etree.XMLSchema(etree.parse(xsd))
+
+        # Last element should be signature
+        schema.assertValid(root[-1])
 
     def test_certificate(self):
         # Generate new key

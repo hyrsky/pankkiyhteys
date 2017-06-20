@@ -36,6 +36,8 @@ from cryptography.hazmat.backends import default_backend
 
 from datetime import datetime
 
+import signxml
+
 RSA_KEY_SIZE = 2048
 """
 Size of accepted RSA key. This is chosen from accepted
@@ -49,7 +51,7 @@ This is chosen form accepted hash functions in Web services
 documentation
 """
 
-class Key(object):
+class Key:
     """
     Web services messages require signature from signed X509 certificate
     aquired from the bank. This class handles storage and usage of the
@@ -118,6 +120,12 @@ class Key(object):
             self._cert = x509.load_pem_x509_certificate(
                 cert, default_backend()
             )
+
+        # Initialize XML Signer with correct algorithm
+        self.signer = signxml.XMLSigner(
+            signature_algorithm='rsa-sha1',
+            digest_algorithm='sha1'
+        )
 
     def private_key(self, password=None):
         """
@@ -190,84 +198,27 @@ class Key(object):
 
         return self._cert.not_valid_after - datetime.utcnow()
 
+    def sign(self, request):
+        """
+        Sign request with this key
+
+        Raises:
+            Exception: If key has no certificate
+        """
+        return self.signer.sign(request, key=self._private_key, cert=self.certificate())
+
     def generate_csr(self, client, hash=hashes.SHA1):
         """
         Generate X509 certificate signing request
 
         Returns:
-            cryptography.x509.CertificateSigningRequest
+            bytes: certificate in der format
         """
 
         csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
             # Identity details required by the bank
             x509.NameAttribute(x509.oid.NameOID.COUNTRY_NAME, client.country),
             x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, client.username),
-        ])).sign(self._private_key, hash, default_backend())
+        ])).sign(self._private_key, HASH_FUNCTION(), default_backend())
 
-        return csr
-
-def certify(key, client, *, transfer_key=None):
-    """
-    Request signed certificate from bank key service
-
-    Args:
-        key pankkiyhteys.key.Key: Key to certify.
-        transfer_key (str): 16 digit one-time key required to prove identity when
-            requesting the first certificate. User must register with the bank to
-            get this key. Transfer key must be used if no valid certificate is
-            available, othervise the certificate can used to to prove identity.
-
-    Raises:
-        Exception: Unable to load key
-        Exception: Communication error
-
-    Returns:
-        pankkiyhteys.key.Key: Certified key object. Make sure to
-            save the certificate afterwards
-    """
-
-    def luhn(n):
-        """Luhn mod 10 checksum by Hans Peter Luhn (1896-1964)"""
-        sum = 0
-        num_digits = len(n)
-        oddeven = num_digits & 1
-
-        for count in range(0, num_digits):
-            digit = int(n[count])
-
-            if not ((n & 1) ^ oddeven):
-                digit = digit * 2
-            if digit > 9:
-                digit = digit - 9
-
-            sum = sum + digit
-
-        return (sum % 10) == 0
-
-    cert_service = client.cert_service()
-
-    # Generate certificate signing request
-    csr = key.generate_csr(client).public_bytes(serialization.Encoding.PEM)
-
-    # Build application request
-    request = {}
-
-    if transfer_key is not None:
-        # Validate transfer key with luhn algorithm
-        if not luhn(transfer_key):
-            raise Exception('Invalid transfer key')
-
-        request['TransferKey'] = transfer_key
-
-    # Sign certificate request with existing key
-    if key.valid():
-        request['foo'] = 'bar'
-        pass
-    else:
-        raise Exception('')
-
-    crt = cert_service.get_certificate(csr)
-
-    print(crt)
-
-    return Key()
+        return csr.public_bytes(serialization.Encoding.DER)
