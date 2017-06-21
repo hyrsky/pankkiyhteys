@@ -4,11 +4,14 @@ from lxml.builder import ElementMaker
 from enum import Enum, auto
 from datetime import datetime
 
+import collections
 import logging
 import base64
 import gzip
 import random
 import abc
+
+import pankkiyhteys.key
 
 SOFTWARE_ID = 'pankkiyhteys v0.1'
 """
@@ -71,6 +74,49 @@ class ApplicationRequest:
             encoding='UTF-8',
             pretty_print=pretty_print
         )
+
+class Response:
+    ResponseHeader = collections.namedtuple('ResponseHeader', [
+        'response_code', 'response_text', 'timestamp'
+    ])
+
+    def __init__(self, header, data=None):
+        """
+        Construct response.
+
+        Args:
+            response (Response.ResponseHeader): Response status
+        """
+        self._response = header
+        self._data = data
+
+    @property
+    def response_code(self):
+        return self._response.response_code
+
+    @property
+    def response_text(self):
+        return self._response.response_text
+
+    @property
+    def timestamp(self):
+        return self._response.timestamp
+
+    @property
+    def data(self):
+        return self._data
+
+
+class ListResponse(Response):
+    def __init__(self, header, list):
+        super().__init__(header, list)
+
+    def __iter__(self):
+        for item in self.data:
+            yield item
+
+    def __len__(self):
+        return len(self.data)
 
 class WebService(metaclass=abc.ABCMeta):
     def __init__(self, client, service):
@@ -206,9 +252,50 @@ class OPService:
         else:
             raise AttributeError('Key has no certificate')
 
+    def validate(self, response):
+        """Validate response signature"""
+        pass
+
 
 class OPWebService(WebService, OPService):
     bank = Bank.Osuuspankki
+
+    class ApplicationRequest(ApplicationRequest):
+        E = ElementMaker(namespace="http://op.fi/mlp/xmldata/",
+                         nsmap={None: "http://op.fi/mlp/xmldata/"})
+
+        def __init__(self, root):
+            super().__init__(OPCertService.CertApplicationRequest.E, root)
+
+        @classmethod
+        def get_file_list(cls, client, *, status='NEW', start_date=None, end_date=None):
+            """
+            Create ApplicationRequest for requesting file list
+
+            Args:
+                client (pankkiyhteys.Client):
+                status (NEW|DLD): Filter new or downloaded files, default = NEW
+                start_date (Datetime): Filter by UTC date
+                end_date (Datetime): Filter by UTC date
+
+            Return:
+                ApplicationRequest:
+            """
+            request = cls.E.ApplicationRequest(
+                cls.E.CustomerId(client.username),
+                cls.E.Timestamp(datetime.utcnow().isoformat() + 'Z'),
+            )
+
+            if start_date is not None:
+                request.append(cls.E.StartDate(start_date.isoformat() + 'Z'))
+            if end_date is not None:
+                request.append(cls.E.EndDate(end_date.isoformat() + 'Z'))
+
+            request.extend((
+                cls.E.Status(status),
+                cls.E.Environment(client.environment.name),
+                cls.E.SoftwareId(SOFTWARE_ID)
+            ))
 
     def file_list(self, *, status='NEW', start_date=None, end_date=None):
         pass
@@ -253,14 +340,42 @@ class OPCertService(CertService, OPService):
 
             return cls(request)
 
+    def _response_header(self, response_header):
+        """Copy Osuuspankki response header to internal data structure"""
+        return Response.ResponseHeader(
+            response_code=int(response_header.ResponseCode),
+            response_text=response_header.ResponseText,
+            timestamp=response_header.Timestamp
+        )
+
     def _request_header(self):
+        """Create Osuuspankki request header"""
         return self.service.get_type('ns0:CertificateRequestHeader')(
             SenderId=self.client.username,
             RequestId=next(self.request_id),
             Timestamp=datetime.utcnow()
         )
 
-    def get_certificates(self):
+    def _get_certificates(self, header, response):
+        """Extract certificates from application response"""
+
+        value = []
+
+        # Parse ApplicationResponse and extract certificates
+        # ApplicationResponse > Certificates[] > Certificate > Certificate
+        certificates = response.find('Certificates', namespaces=response.nsmap)
+        if certificates is not None:
+            for certificate in certificates:
+                certificate = certificate.find('Certificate', namespaces=response.nsmap)
+                if certificate is not None:
+                    # Convert to PEM bytes
+                    value.append(pankkiyhteys.key.load_certificate(
+                        base64.b64decode(certificate.text)
+                    ))
+
+        return value
+
+    def service_certificates(self):
         request = (OPCertService.CertApplicationRequest
                                 .get_service_certificates(self.client))
 
@@ -269,8 +384,14 @@ class OPCertService(CertService, OPService):
             self._request_header(), request.to_string()  # zeep will b64encode string
         )
 
+        # Validate signature
+        self.validate(response)
+
         # Handle response
-        return response
+        header = self._response_header(response.ResponseHeader)
+        response = etree.fromstring(response.ApplicationResponse)
+
+        return ListResponse(header, self._get_certificates(header, response))
 
     def certify(self, *, transfer_key=None):
         csr = self.client.key.generate_csr(self.client)
@@ -287,5 +408,13 @@ class OPCertService(CertService, OPService):
             self._request_header(), request.to_string()  # zeep will b64encode string
         )
 
+        # Validate signature
+        self.validate(response)
+
         # Handle response
-        return response
+        header = self._response_header(response.ResponseHeader)
+        response = etree.fromstring(response.ApplicationResponse)
+        certificates = self._get_certificates(header, response)
+
+        # Response should ever really containt only a single certificate
+        return Response(header, certificates[0] if len(certificates) > 0 else None)

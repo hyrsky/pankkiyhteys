@@ -24,6 +24,6 @@ nosetests --with-coverage --cover-html --cover-html-dir=htmlcov --cover-package=
 
 ## Todo
 
-- [ ] API: How to load keys
+- [ ] Signature validation, revokation lists, etc.
 - [ ] Osuuspankki implementation
 - [ ] Testing

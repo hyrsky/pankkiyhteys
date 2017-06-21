@@ -36,6 +36,7 @@ from cryptography.hazmat.backends import default_backend
 
 from datetime import datetime
 
+import base64
 import signxml
 
 RSA_KEY_SIZE = 2048
@@ -222,3 +223,8 @@ class Key:
         ])).sign(self._private_key, HASH_FUNCTION(), default_backend())
 
         return csr.public_bytes(serialization.Encoding.DER)
+
+def load_certificate(data):
+    """Load der encoded certificate into pem encoded bytes"""
+    return (x509.load_der_x509_certificate(data, default_backend())
+                .public_bytes(encoding=serialization.Encoding.PEM))

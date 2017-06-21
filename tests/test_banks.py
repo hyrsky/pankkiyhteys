@@ -131,11 +131,19 @@ class OsuuspankkiCertServiceTestSuite(unittest.TestCase):
         client.bank = banks.Bank.Osuuspankki
         client.environment = banks.Environment.TEST
 
+        response = unittest.mock.Mock()
+        response.ResponseHeader.ResponseCode = '00'
+        response.ResponseHeader.ResponseText = 'OK.'
+        response.ResponseHeader.Timestamp = datetime.utcnow()
+        response.ApplicationResponse = '<ApplicationResponse></ApplicationResponse>'
+
         wsdl_client = unittest.mock.Mock()
+        wsdl_client.service.getServiceCertificates.return_value = response
 
         # Action
         service = banks.OPCertService(client, wsdl_client)
-        service.get_certificates()
+        service.verify = unittest.mock.Mock()
+        service.service_certificates()
 
         # Validate ApplicationRequest schema
         with open('tests/xsd/CertApplicationRequest_200812.xsd') as xsd:
@@ -162,10 +170,18 @@ class OsuuspankkiCertServiceTestSuite(unittest.TestCase):
         client.bank = banks.Bank.Osuuspankki
         client.environment = banks.Environment.TEST
 
+        response = unittest.mock.Mock()
+        response.ResponseHeader.ResponseCode = '00'
+        response.ResponseHeader.ResponseText = 'OK.'
+        response.ResponseHeader.Timestamp = datetime.utcnow()
+        response.ApplicationResponse = '<ApplicationResponse></ApplicationResponse>'
+
         wsdl_client = unittest.mock.Mock()
+        wsdl_client.service.getCertificate.return_value = response
 
         # Action
         service = banks.OPCertService(client, wsdl_client)
+        service.verify = unittest.mock.Mock()
         service.certify()
 
         # Validate ApplicationRequest schema
@@ -194,10 +210,18 @@ class OsuuspankkiCertServiceTestSuite(unittest.TestCase):
         client.bank = banks.Bank.Osuuspankki
         client.environment = banks.Environment.TEST
 
+        response = unittest.mock.Mock()
+        response.ResponseHeader.ResponseCode = '00'
+        response.ResponseHeader.ResponseText = 'OK.'
+        response.ResponseHeader.Timestamp = datetime.utcnow()
+        response.ApplicationResponse = '<ApplicationResponse></ApplicationResponse>'
+
         wsdl_client = unittest.mock.Mock()
+        wsdl_client.service.getCertificate.return_value = response
 
         # Action
         service = banks.OPCertService(client, wsdl_client)
+        service.verify = unittest.mock.Mock()
         service.certify(transfer_key='1234567890123452')
 
         # Validate ApplicationRequest schema
