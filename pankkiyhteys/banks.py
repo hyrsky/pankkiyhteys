@@ -238,6 +238,7 @@ class OPService:
 
         # Sign certificate request with existing key
         if self.client.key.valid():
+            # FIXME?
             request.sign(self.client.key)
 
         # Use one-time transfer key
@@ -254,15 +255,15 @@ class OPService:
 
     def validate(self, response):
         """Validate response signature"""
-        pankkiyhteys.key.validate(response)
+        pankkiyhteys.key.validate(response)  # TODO
 
 
 class OPWebService(WebService, OPService):
     bank = Bank.Osuuspankki
 
     class ApplicationRequest(ApplicationRequest):
-        E = ElementMaker(namespace="http://op.fi/mlp/xmldata/",
-                         nsmap={None: "http://op.fi/mlp/xmldata/"})
+        E = ElementMaker(namespace="http://bxd.fi/xmldata/",
+                         nsmap={None: "http://bxd.fi/xmldata/"})
 
         def __init__(self, root):
             super().__init__(OPCertService.CertApplicationRequest.E, root)

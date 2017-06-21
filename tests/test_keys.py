@@ -84,7 +84,6 @@ class KeyTestSuite(unittest.TestCase):
 
         key = utils.create_test_key()
         root = key.sign(E.root(E.content('Hello, world!')))
-        print(etree.tostring(root))
 
         # Validate ApplicationRequest schema
         with open('tests/xsd/xmldsig-core-schema.xsd') as xsd:

@@ -78,7 +78,7 @@ class Key:
 
         Args:
             key (bytes): RSA private key in PEM format
-            cert (bytes, optional): X509 certificate in PEM format
+            cert (bytes, optional): X509 certificate in DER format
             password (bytes, optional): Encrypted private key password
 
         Raises
@@ -117,15 +117,9 @@ class Key:
             self._cert = cert
         else:
             # Load x509 PEM certificate from bytes
-            self._cert = x509.load_pem_x509_certificate(
+            self._cert = x509.load_der_x509_certificate(
                 cert, default_backend()
             )
-
-        # Initialize XML Signer with correct algorithm
-        self.signer = signxml.XMLSigner(
-            signature_algorithm='rsa-sha1',
-            digest_algorithm='sha1'
-        )
 
     def private_key(self, password=None):
         """
@@ -158,12 +152,12 @@ class Key:
             AttributeError: if key has no certificate
 
         Return:
-            bytes: PEM encoded bytes containing the X509 certificate
+            bytes: DER encoded bytes containing the X509 certificate
         """
         if self._cert is None:
             raise AttributeError('Key has no certificate')
 
-        return self._cert.public_bytes(encoding=serialization.Encoding.PEM)
+        return self._cert.public_bytes(encoding=serialization.Encoding.DER)
 
     def valid(self):
         """
@@ -198,14 +192,28 @@ class Key:
 
         return self._cert.not_valid_after - datetime.utcnow()
 
-    def sign(self, request):
+    def sign(self, request, *,
+             method=signxml.methods.enveloped,
+             reference_uri=None,
+             key_info=None):
         """
         Sign request with this key
 
         Raises:
             Exception: If key has no certificate
         """
-        return self.signer.sign(request, key=self._private_key, cert=self.certificate())
+        # Initialize XML Signer with correct algorithm
+        signer = signxml.XMLSigner(
+            method=method,
+            signature_algorithm='rsa-sha1',
+            digest_algorithm='sha1'
+        )
+
+        return signer.sign(
+            request, self._private_key, self.certificate(),
+            reference_uri=reference_uri,
+            key_info=key_info,
+        )
 
     def generate_csr(self, client, hash=hashes.SHA1):
         """
