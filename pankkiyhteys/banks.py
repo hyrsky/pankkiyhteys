@@ -11,7 +11,7 @@ import gzip
 import random
 import abc
 
-import pankkiyhteys.key
+import pankkiyhteys
 
 SOFTWARE_ID = 'pankkiyhteys v0.1'
 """
@@ -254,7 +254,7 @@ class OPService:
 
     def validate(self, response):
         """Validate response signature"""
-        pass
+        pankkiyhteys.key.validate(response)
 
 
 class OPWebService(WebService, OPService):
@@ -384,23 +384,28 @@ class OPCertService(CertService, OPService):
             self._request_header(), request.to_string()  # zeep will b64encode string
         )
 
-        # Validate signature
-        self.validate(response)
-
         # Handle response
         header = self._response_header(response.ResponseHeader)
         response = etree.fromstring(response.ApplicationResponse)
 
+        # Validate signature
+        self.validate(response)
+
         return ListResponse(header, self._get_certificates(header, response))
 
     def certify(self, *, transfer_key=None):
-        csr = self.client.key.generate_csr(self.client)
+        # Renewing always requires new key pair
+        key = self.client.key
+        if key.valid():
+            key = pankkiyhteys.key.Key.generate()
+
+        csr = key.generate_csr(self.client)
 
         # Generate new certificate signing request
         request = OPCertService.CertApplicationRequest.get_certificate(self.client)
         request.content(csr)
 
-        # Sign or attach transfer key
+        # Sign with old key or attach transfer key
         self.sign(request, transfer_key=transfer_key)
 
         # Make request
@@ -408,13 +413,23 @@ class OPCertService(CertService, OPService):
             self._request_header(), request.to_string()  # zeep will b64encode string
         )
 
-        # Validate signature
-        self.validate(response)
-
         # Handle response
         header = self._response_header(response.ResponseHeader)
         response = etree.fromstring(response.ApplicationResponse)
-        certificates = self._get_certificates(header, response)
+
+        # Validate signature
+        self.validate(response)
 
         # Response should ever really containt only a single certificate
-        return Response(header, certificates[0] if len(certificates) > 0 else None)
+        certificates = self._get_certificates(header, response)
+        certificate = certificates[0] if len(certificates) > 0 else None
+
+        # Make key with new certificate
+        key = pankkiyhteys.key.Key(key._private_key, certificate)
+
+        # On success: make client use new certificate
+        if header.response_code == 0:
+            self.client.key = key
+
+        # Return new key
+        return Response(header, key)

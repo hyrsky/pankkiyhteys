@@ -1,5 +1,5 @@
 import unittest
-import unittest.mock
+import unittest.mock as mock
 import random
 import utils
 from datetime import datetime
@@ -124,25 +124,25 @@ class OsuuspankkiCertServiceTestSuite(unittest.TestCase):
         Test getServiceCertificates call
         """
 
-        client = unittest.mock.Mock()
+        client = mock.Mock()
         client.username = '1234567890'
-        client.key = unittest.mock.Mock()
+        client.key = mock.Mock()
         client.country = 'FI'
         client.bank = banks.Bank.Osuuspankki
         client.environment = banks.Environment.TEST
 
-        response = unittest.mock.Mock()
+        response = mock.Mock()
         response.ResponseHeader.ResponseCode = '00'
         response.ResponseHeader.ResponseText = 'OK.'
         response.ResponseHeader.Timestamp = datetime.utcnow()
         response.ApplicationResponse = '<ApplicationResponse></ApplicationResponse>'
 
-        wsdl_client = unittest.mock.Mock()
+        wsdl_client = mock.Mock()
         wsdl_client.service.getServiceCertificates.return_value = response
 
         # Action
         service = banks.OPCertService(client, wsdl_client)
-        service.verify = unittest.mock.Mock()
+        service.verify = mock.Mock()
         service.service_certificates()
 
         # Validate ApplicationRequest schema
@@ -163,26 +163,36 @@ class OsuuspankkiCertServiceTestSuite(unittest.TestCase):
         # Setup
         key = utils.create_test_key()
 
-        client = unittest.mock.Mock()
+        client = mock.Mock()
         client.username = '1234567890'
         client.key = key
         client.country = 'FI'
         client.bank = banks.Bank.Osuuspankki
         client.environment = banks.Environment.TEST
 
-        response = unittest.mock.Mock()
+        response = mock.Mock()
         response.ResponseHeader.ResponseCode = '00'
         response.ResponseHeader.ResponseText = 'OK.'
         response.ResponseHeader.Timestamp = datetime.utcnow()
         response.ApplicationResponse = '<ApplicationResponse></ApplicationResponse>'
 
-        wsdl_client = unittest.mock.Mock()
+        wsdl_client = mock.Mock()
         wsdl_client.service.getCertificate.return_value = response
 
         # Action
-        service = banks.OPCertService(client, wsdl_client)
-        service.verify = unittest.mock.Mock()
-        service.certify()
+        with mock.patch('pankkiyhteys.key.Key') as KeyMock:
+            KeyMock.generate.return_value._private_key = mock.sentinel.private_key
+            KeyMock.generate.return_value.generate_csr.return_value = b'my-test-value'
+            KeyMock.return_value = mock.sentinel.new_key
+
+            service = banks.OPCertService(client, wsdl_client)
+            service.verify = mock.Mock()
+            rv = service.certify()
+
+            KeyMock.generate.assert_called_once()  # New key was generated
+            KeyMock.assert_called_once_with(mock.sentinel.private_key, None)
+            assert rv.data == mock.sentinel.new_key  # New key was returned
+            assert client.key == mock.sentinel.new_key  # Client uses new key
 
         # Validate ApplicationRequest schema
         with open('tests/xsd/CertApplicationRequest_200812.xsd') as xsd:
@@ -194,35 +204,43 @@ class OsuuspankkiCertServiceTestSuite(unittest.TestCase):
         args, kwargs = wsdl_client.service.getCertificate.call_args
         schema.assertValid(etree.fromstring(args[1]))
 
-    def test_transfer_key(self):
+    @mock.patch('pankkiyhteys.key.Key')
+    def test_transfer_key(self, KeyMock):
         """
         Test getCertificate call with transfer key
         """
 
         # Setup
-        key = unittest.mock.Mock()
+        key = mock.Mock()
         key.valid.return_value = False  # Mocked key has no certificate
         key.generate_csr.return_value = b'my-certificate'
+        key._private_key = mock.sentinel.private_key
 
-        client = unittest.mock.Mock()
+        client = mock.Mock()
         client.username = '1234567890'
         client.key = key
         client.bank = banks.Bank.Osuuspankki
         client.environment = banks.Environment.TEST
 
-        response = unittest.mock.Mock()
+        response = mock.Mock()
         response.ResponseHeader.ResponseCode = '00'
         response.ResponseHeader.ResponseText = 'OK.'
         response.ResponseHeader.Timestamp = datetime.utcnow()
         response.ApplicationResponse = '<ApplicationResponse></ApplicationResponse>'
 
-        wsdl_client = unittest.mock.Mock()
+        wsdl_client = mock.Mock()
         wsdl_client.service.getCertificate.return_value = response
 
         # Action
         service = banks.OPCertService(client, wsdl_client)
-        service.verify = unittest.mock.Mock()
-        service.certify(transfer_key='1234567890123452')
+        service.verify = mock.Mock()
+        rv = service.certify(transfer_key='1234567890123452')
+
+        # Existing key has no certificate so new key was not created
+        KeyMock.return_value.generate.assert_not_called()
+        assert rv.data == KeyMock.return_value
+        args, kwargs = KeyMock.call_args
+        assert args[0] == mock.sentinel.private_key
 
         # Validate ApplicationRequest schema
         with open('tests/xsd/CertApplicationRequest_200812.xsd') as xsd:
