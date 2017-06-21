@@ -509,7 +509,7 @@ class OPCertService(CertService, OPService):
             for certificate in certificates:
                 certificate = certificate.find('Certificate', namespaces=response.nsmap)
                 if certificate is not None:
-                    # Convert to PEM bytes
+                    # Convert to bytes
                     value.append(pankkiyhteys.key.load_certificate(
                         base64.b64decode(certificate.text)
                     ))

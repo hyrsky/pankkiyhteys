@@ -117,7 +117,7 @@ class Key:
             self._cert = cert
         else:
             # Load x509 PEM certificate from bytes
-            self._cert = x509.load_der_x509_certificate(
+            self._cert = x509.load_pem_x509_certificate(
                 cert, default_backend()
             )
 
@@ -152,12 +152,12 @@ class Key:
             AttributeError: if key has no certificate
 
         Return:
-            bytes: DER encoded bytes containing the X509 certificate
+            bytes: PEM encoded bytes containing the X509 certificate
         """
         if self._cert is None:
             raise AttributeError('Key has no certificate')
 
-        return self._cert.public_bytes(encoding=serialization.Encoding.DER)
+        return self._cert.public_bytes(encoding=serialization.Encoding.PEM)
 
     def valid(self):
         """
