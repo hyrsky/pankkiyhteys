@@ -33,7 +33,9 @@ class ClientTestSuite(unittest.TestCase):
         wsse = pankkiyhteys.client.WSSEPlugin(client)
         envelope, headers = wsse.apply(envelope, None)
 
-        # TODO: test something
+        print(etree.tostring(envelope, pretty_print=True).decode())
+
+        # assert False
 
     @mock.patch.object(WebService, 'factory')
     @mock.patch.object(CertService, 'factory')

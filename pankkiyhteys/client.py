@@ -31,7 +31,6 @@ class WSSEPlugin(zeep.wsse.signature.MemorySignature):
     WSSE = ElementMaker(namespace=zeep.ns.WSSE, nsmap={'wsse': zeep.ns.WSSE})
     DS = ElementMaker(namespace='http://www.w3.org/2000/09/xmldsig#',
                       nsmap={'ds': 'http://www.w3.org/2000/09/xmldsig#'})
-    ID_ATTR = etree.QName(zeep.ns.WSU, 'Id')
     VALUE_TYPE = ('http://docs.oasis-open.org/wss/2004/01/' +
                   'oasis-200401-wss-x509-token-profile-1.0#X509v3')
     ENCODING_TYPE = ('http://docs.oasis-open.org/wss/2004/01/' +
@@ -47,10 +46,10 @@ class WSSEPlugin(zeep.wsse.signature.MemorySignature):
         self.client = client
 
     def _ensure_id(self, node):
-        id_val = node.get(WSSEPlugin.ID_ATTR)
+        id_val = node.get(zeep.wsse.utils.ID_ATTR)
         if not id_val:
             id_val = str(uuid4())
-            node.set(WSSEPlugin.ID_ATTR, id_val)
+            node.set(zeep.wsse.utils.ID_ATTR, id_val)
         return id_val
 
     def apply(self, envelope, headers):
@@ -72,31 +71,25 @@ class WSSEPlugin(zeep.wsse.signature.MemorySignature):
         security.append(timestamp)
 
         # Add X509 certificate
-        binary_token = WSSE.BinarySecurityToken()
-        binary_token.set('ValueType', WSSEPlugin.VALUE_TYPE)
-        binary_token.set('EncodingType', WSSEPlugin.ENCODING_TYPE)
+        binary_token = etree.Element(etree.QName(zeep.ns.WSSE, 'BinarySecurityToken'),
+                                     ValueType=WSSEPlugin.VALUE_TYPE,
+                                     EncodingType=WSSEPlugin.ENCODING_TYPE,
+                                     nsmap={'wsu': zeep.ns.WSU})
         binary_token.text = base64.b64encode(self.client.key.certificate())
 
         # Add wsu:Id attributes to body and timestamp, these will be signed
-        timestamp_id = self._ensure_id(timestamp)
         body_id = self._ensure_id(envelope.find(etree.QName(soap_env, 'Body')))
+        timestamp_id = self._ensure_id(timestamp)
         binary_token_id = self._ensure_id(binary_token)
-
-        security_token = DS.KeyInfo(
-            WSSE.SecurityTokenReference(
-                WSSE.Reference(
-                    URI=binary_token_id,
-                    ValueType=WSSEPlugin.VALUE_TYPE
-                )
-            )
-        )
 
         # Sign body and timestamp
         signature = self.client.key.sign(
             envelope,
             method=signxml.methods.detached,
             reference_uri=[timestamp_id, body_id],
-            key_info=security_token
+            key_info=DS.KeyInfo(WSSE.SecurityTokenReference(WSSE.Reference(
+                URI=binary_token_id, ValueType=WSSEPlugin.VALUE_TYPE
+            )))
         )
 
         # Insert the Signature node in the wsse:Security header.

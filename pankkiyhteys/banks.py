@@ -106,23 +106,33 @@ class Response:
     def data(self):
         return self._data
 
-
-class ListResponse(Response):
-    def __init__(self, header, list):
-        super().__init__(header, list)
-
-    def __iter__(self):
-        for item in self.data:
-            yield item
-
-    def __len__(self):
-        return len(self.data)
+class File:
+    def __init__(self, *, reference, timestamp, status, type, parent, target):
+        self.reference = reference
+        self.timestamp = timestamp
+        self.status = status
+        self.type = type
+        self.parent = parent
+        self.target = target
 
 class WebService(metaclass=abc.ABCMeta):
     def __init__(self, client, service):
         self.client = client
         self.service = service
         self.logger = logging.getLogger(__name__)
+
+    def get_files(self, type, *, status='NEW', start_date=None, end_date=None):
+        # Get list of files
+        response = self.file_list(status=status, start_date=start_date,
+                                  end_date=end_date)
+
+        if response.status_code != 0:
+            raise RuntimeError('Request failed: ' + response.response_text)
+
+        # Download files that match type
+        for file in response.data:
+            if file.type in type:
+                yield self.get_file(file.reference)
 
     @classmethod
     def factory(cls, client, service):
@@ -143,7 +153,7 @@ class WebService(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    def get_file(self, key):
+    def get_file(self, reference):
         pass
 
     @abc.abstractmethod
@@ -253,7 +263,7 @@ class OPService:
         else:
             raise AttributeError('Key has no certificate')
 
-    def validate(self, response):
+    def verify(self, response):
         """Validate response signature"""
         pankkiyhteys.key.validate(response)  # TODO
 
@@ -267,6 +277,43 @@ class OPWebService(WebService, OPService):
 
         def __init__(self, root):
             super().__init__(OPCertService.CertApplicationRequest.E, root)
+
+        @classmethod
+        def upload_file(cls, client, target, type, *, compression=False):
+            request = cls.E.ApplicationRequest(
+                cls.E.CustomerId(client.username),
+                cls.E.Timestamp(datetime.utcnow().isoformat() + 'Z'),
+                cls.E.Environment(client.environment.value),
+                cls.E.TargetId(target)
+            )
+
+            if compression:
+                request.append(cls.E.Compression('true'))
+
+            request.extend(
+                cls.E.SoftwareId(SOFTWARE_ID),
+                cls.E.FileType(type)
+            )
+
+            return cls(request)
+
+        @classmethod
+        def get_file(cls, client, reference, compression=False):
+            request = cls.E.ApplicationRequest(
+                cls.E.CustomerId(client.username),
+                cls.E.Timestamp(datetime.utcnow().isoformat() + 'Z'),
+                cls.E.Environment(client.environment.value),
+                cls.E.FileReferences(
+                    cls.E.FileReference(reference)
+                ),
+            )
+
+            if compression:
+                request.append(cls.Compression('true'))
+
+            request.append(cls.E.SoftwareId(SOFTWARE_ID))
+
+            return cls(request)
 
         @classmethod
         def get_file_list(cls, client, *, status='NEW', start_date=None, end_date=None):
@@ -298,14 +345,107 @@ class OPWebService(WebService, OPService):
                 cls.E.SoftwareId(SOFTWARE_ID)
             ))
 
+            return cls(request)
+
+    def _request_header(self):
+        return self.service.get_type('ns0:RequestHeader')(
+            SenderId=self.client.username,
+            RequestId=next(self.request_id),
+            Timestamp=datetime.utcnow().isoformat() + 'Z',
+            Language='FI',
+            UserAgent=SOFTWARE_ID,
+            ReceiverId='OKOYFIHH'
+        )
+
+    def _response_header(self, response_header):
+        """Copy Osuuspankki response header to internal data structure"""
+        return Response.ResponseHeader(
+            response_code=int(response_header.ResponseCode),
+            response_text=response_header.ResponseText,
+            timestamp=response_header.Timestamp
+        )
+
+    def _get_files(self, response):
+        values = []
+
+        files = response.find('FileDescriptors', namespaces=response.nsmap)
+        for file in files:
+            values.append(File(
+                reference=file.find('FileReference'),
+                target=file.find('TargetId'),
+                parent=file.find('ParentFileReference'),
+                type=file.find('FileType'),
+                timestamp=file.find('FileTimestamp'),
+                status=file.find('Status'),
+            ))
+
+        return values
+
+    def _get_file(self, response):
+        content = response.find('Content', namespace=response.nsmap)
+        compressed = response.find('Compressed', namespace=response.nsmap)
+
+        if content is None:
+            return None
+
+        data = base64.b64decode(content.text)
+        if compressed is not None and compressed.text.upper() == 'TRUE':
+            data = gzip.decompress(data)
+
+        return data
+
     def file_list(self, *, status='NEW', start_date=None, end_date=None):
-        pass
+        request = OPWebService.ApplicationRequest.get_file_list(
+            self.client, status=status, start_date=start_date, end_date=end_date
+        )
 
-    def get_file(self, key):
-        pass
+        # Make request
+        response = self.service.service.downloadFileList(
+            self._request_header(), request.to_string()  # zeep will b64encode string
+        )
 
-    def upload_file(self, key):
-        pass
+        header = self._response_header(response.ResponseHeader)
+        response = etree.fromstring(response.ApplicationResponse)
+
+        # Verify signature
+        self.verify(response)
+
+        return Response(header, self._get_files(response))
+
+    def get_file(self, reference):
+        request = OPWebService.ApplicationRequest.get_file(self.client, reference)
+
+        # Make request
+        response = self.service.service.getFile(
+            self._request_header(), request.to_string()  # zeep will b64encode string
+        )
+
+        header = self._response_header(response.ResponseHeader)
+        response = etree.fromstring(response.ApplicationResponse)
+
+        # Verify signature
+        self.verify(response)
+
+        return Response(header, self._get_file(response))
+
+    def upload_file(self, target, type, file):
+        request = OPWebService.ApplicationRequest.upload_file(
+            self.client, target, type, file)
+        request.content = file
+
+        # Make request
+        response = self.service.service.getFile(
+            self._request_header(), request.to_string()  # zeep will b64encode string
+        )
+
+        header = self._response_header(response.ResponseHeader)
+        response = etree.fromstring(response.ApplicationResponse)
+
+        # Verify signature
+        self.verify(response)
+
+        return Response(header, None)
+
 
 class OPCertService(CertService, OPService):
     bank = Bank.Osuuspankki
@@ -390,9 +530,9 @@ class OPCertService(CertService, OPService):
         response = etree.fromstring(response.ApplicationResponse)
 
         # Validate signature
-        self.validate(response)
+        self.verify(response)
 
-        return ListResponse(header, self._get_certificates(header, response))
+        return Response(header, self._get_certificates(header, response))
 
     def certify(self, *, transfer_key=None):
         # Renewing always requires new key pair
@@ -419,7 +559,7 @@ class OPCertService(CertService, OPService):
         response = etree.fromstring(response.ApplicationResponse)
 
         # Validate signature
-        self.validate(response)
+        self.verify(response)
 
         # Response should ever really containt only a single certificate
         certificates = self._get_certificates(header, response)
