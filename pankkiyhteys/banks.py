@@ -65,15 +65,10 @@ class ApplicationRequest:
 
     def sign(self, key):
         """Add xml signature to this request"""
-        self.root = key.sign(self.root)
+        key.sign(self.root)
 
     def to_string(self, pretty_print=False):
-        return etree.tostring(
-            self.root,
-            xml_declaration=True,
-            encoding='UTF-8',
-            pretty_print=pretty_print
-        )
+        return etree.tostring(self.root, pretty_print=pretty_print)
 
 class Response:
     ResponseHeader = collections.namedtuple('ResponseHeader', [
@@ -248,7 +243,6 @@ class OPService:
 
         # Sign certificate request with existing key
         if self.client.key.valid():
-            # FIXME?
             request.sign(self.client.key)
 
         # Use one-time transfer key
@@ -351,7 +345,7 @@ class OPWebService(WebService, OPService):
         return self.service.get_type('ns0:RequestHeader')(
             SenderId=self.client.username,
             RequestId=next(self.request_id),
-            Timestamp=datetime.utcnow().isoformat() + 'Z',
+            Timestamp=datetime.utcnow(),
             Language='FI',
             UserAgent=SOFTWARE_ID,
             ReceiverId='OKOYFIHH'
@@ -394,10 +388,26 @@ class OPWebService(WebService, OPService):
 
         return data
 
+    def test(self):
+        # Make request
+        response = self.service.service.downloadFileList(
+            self._request_header(), b''  # zeep will b64encode string
+        )
+
+        header = self._response_header(response.ResponseHeader)
+        response = etree.fromstring(response.ApplicationResponse)
+
+        # Verify signature
+        self.verify(response)
+
+        return Response(header, self._get_files(response))
+
     def file_list(self, *, status='NEW', start_date=None, end_date=None):
         request = OPWebService.ApplicationRequest.get_file_list(
             self.client, status=status, start_date=start_date, end_date=end_date
         )
+
+        self.sign(request)
 
         # Make request
         response = self.service.service.downloadFileList(
@@ -414,6 +424,8 @@ class OPWebService(WebService, OPService):
 
     def get_file(self, reference):
         request = OPWebService.ApplicationRequest.get_file(self.client, reference)
+
+        self.sign(request)
 
         # Make request
         response = self.service.service.getFile(
@@ -432,6 +444,8 @@ class OPWebService(WebService, OPService):
         request = OPWebService.ApplicationRequest.upload_file(
             self.client, target, type, file)
         request.content = file
+
+        self.sign(request)
 
         # Make request
         response = self.service.service.getFile(

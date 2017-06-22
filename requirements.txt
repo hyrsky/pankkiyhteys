@@ -1,4 +1,4 @@
-lxml
 zeep
 cryptography
-signxml
+xmlsec
+lxml
