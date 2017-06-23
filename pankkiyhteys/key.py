@@ -34,6 +34,8 @@ from datetime import datetime, timedelta
 
 import uuid
 import base64
+import logging
+import hashlib
 import xmlsec
 
 from lxml import etree
@@ -76,11 +78,14 @@ class Key:
         Returns:
             pankkiyhteys.key.Key
         """
-        return cls(asymmetric.rsa.generate_private_key(
+        logger = logging.getLogger(__name__)
+        key = cls(asymmetric.rsa.generate_private_key(
             public_exponent=65537,
             key_size=RSA_KEY_SIZE,
             backend=default_backend()
         ))
+        logger.info('Generated private key <%s>' % key.fingerprint)
+        return key
 
     def __init__(self, key, cert=None, *, password=None):
         """
@@ -104,9 +109,13 @@ class Key:
                 backend.
         """
 
+        self.logger = logging.getLogger(__name__)
+
         if not isinstance(key, asymmetric.rsa.RSAPrivateKey):
             # Load key from bytes, assume PEM encoded
             key = serialization.load_pem_private_key(key, password, default_backend())
+
+            logger.info('Loading private key <%s>' % hashlib.sha256(key).hexdigest())
 
             # PEM files could contain DSA or elliptic curve keys
             if not isinstance(key, asymmetric.rsa.RSAPrivateKey):
@@ -193,6 +202,10 @@ class Key:
 
         return (self._cert.not_valid_before < datetime.utcnow() <
                 self._cert.not_valid_after)
+
+    @property
+    def fingerprint(self):
+        return hashlib.sha256(self.private_key()).hexdigest())
 
     @property
     def valid_duration(self):
@@ -307,10 +320,10 @@ Todo:
 """
 
 def _add_timestamp(node):
-    timestamp = etree.Element(QName(ns.WSU, 'Timestamp'))
+    timestamp = etree.Element(QName(ns.WSU, 'Timestamp'), nsmap={'wsu': ns.WSU})
 
     created = datetime.utcnow().replace(microsecond=0)
-    expires = (created + timedelta(hours=12)).isoformat() + 'Z'
+    expires = (created + timedelta(hours=1)).isoformat() + 'Z'
     created = created.isoformat() + 'Z'
 
     etree.SubElement(timestamp, QName(ns.WSU, 'Created')).text = created
@@ -321,10 +334,11 @@ def _add_timestamp(node):
 def _create_binary_security_token(key):
     bst = etree.Element(
         QName(ns.WSSE, 'BinarySecurityToken'),
+        ValueType=X509TOKEN,
         EncodingType=BASE64B,
-        ValueType=X509TOKEN
+        nsmap={'wsu': ns.WSU}
     )
-    bst.set(QName(ns.WSU, 'Id'), str(uuid.uuid4()))
+    bst.set(QName(ns.WSU, 'Id'), 'id-%s' % str(uuid.uuid4()))
     bst.text = base64.b64encode(
         key.certificate(encoding=serialization.Encoding.DER)
     )
@@ -376,19 +390,20 @@ def sign_envelope_with_key(envelope, key):
                      ValueType=X509TOKEN,
                      URI='#' + bst.get(QName(ns.WSU, 'Id')))
 
+    soap_env = detect_soap_env(envelope)
     security = get_security_header(envelope)
-
-    # Add timestamp
-    _add_timestamp(security)
+    security.set(QName(soap_env, 'mustUnderstand'), '1')
 
     # Insert the Signature node in the wsse:Security header.
     security.append(bst)
     security.append(signature)
 
+    # Add timestamp
+    _add_timestamp(security)
+
     ctx = xmlsec.SignatureContext()
     ctx.key = key.sign_key
 
-    soap_env = detect_soap_env(envelope)
     _sign_node(ctx, signature, envelope.find(QName(soap_env, 'Body')))
     _sign_node(ctx, signature, security.find(QName(ns.WSU, 'Timestamp')))
 
@@ -397,9 +412,7 @@ def sign_envelope_with_key(envelope, key):
 
     signature = xmlsec.tree.find_node(envelope, xmlsec.constants.NodeSignature)
     signature_value = signature.find(QName(xmlsec.constants.DSigNs, 'SignatureValue'))
-
     signature_value.text = "".join(signature_value.text.split())
-    print(signature_value.text)
 
 def _sign_node(ctx, signature, target):
     """Add sig for ``target`` in ``signature`` node, using ``ctx`` context.
@@ -429,4 +442,4 @@ def _sign_node(ctx, signature, target):
     # signature.
     transform = xmlsec.template.add_transform(ref, xmlsec.Transform.EXCL_C14N)
 
-    xmlsec.template.transform_add_c14n_inclusive_namespaces(transform, "")
+    # xmlsec.template.transform_add_c14n_inclusive_namespaces(transform, "")

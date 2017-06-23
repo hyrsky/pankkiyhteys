@@ -42,7 +42,9 @@ class ServiceTestSuite(unittest.TestCase):
         request.content(b'My test content')
         request.sign(key)
 
-        schema.assertValid(etree.fromstring(request.to_string()))
+        root = etree.fromstring(request.to_string())
+
+        schema.assertValid(root)
 
     def test_application_request(self):
         """

@@ -1,14 +1,46 @@
 import unittest
 
 from datetime import datetime, timedelta
-from lxml.builder import E
+from lxml.builder import ElementMaker
 from lxml import etree
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import asymmetric, serialization
 
 import pankkiyhteys
+import xmlsec
 import utils
+
+class TestWSSE(unittest.TestCase):
+    def test_wsse(self):
+        parser = etree.XMLParser(remove_blank_text=True)
+        envelope = etree.fromstring("""
+            <soapenv:Envelope
+                xmlns:tns="http://tests.python-zeep.org/"
+                xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+                xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/">
+              <soapenv:Header></soapenv:Header>
+              <soapenv:Body>
+                <tns:Function>
+                  <tns:Argument>OK</tns:Argument>
+                </tns:Function>
+              </soapenv:Body>
+            </soapenv:Envelope>
+        """, parser=parser)
+
+        key = utils.create_test_key()
+
+        pankkiyhteys.key.sign_envelope_with_key(envelope, key)
+
+        print(etree.tostring(envelope, pretty_print=True).decode())
+
+        signature_node = xmlsec.tree.find_node(envelope, xmlsec.constants.NodeSignature)
+
+        # Verify
+        ctx = xmlsec.SignatureContext()
+        ctx.key = key.sign_key
+        ctx.verify(signature_node)
 
 class KeyTestSuite(unittest.TestCase):
     def sign_cert(self, key, *,
@@ -83,14 +115,34 @@ class KeyTestSuite(unittest.TestCase):
         """
 
         key = utils.create_test_key()
-        root = key.sign(E.root(E.content('Hello, world!')))
+
+        E = ElementMaker(namespace="http://bxd.fi/xmldata/",
+                         nsmap={None: "http://bxd.fi/xmldata/"})
+
+        root = E.ApplicationRequest(
+            E.CustomerId('1000000000'),
+            E.Timestamp('2011-08-15T09:48:31.177+03:00'),
+            E.Status('NEW'),
+            E.Environment('TEST'),
+            E.SoftwareId('soft'))
+
+        key.sign(root)
 
         # Validate ApplicationRequest schema
         with open('tests/xsd/xmldsig-core-schema.xsd') as xsd:
             schema = etree.XMLSchema(etree.parse(xsd))
 
-        # Last element should be signature
-        schema.assertValid(root[-1])
+        root = etree.tostring(root).decode()
+        root = etree.fromstring(root)
+
+        signature_node = xmlsec.tree.find_node(root, xmlsec.constants.NodeSignature)
+
+        schema.assertValid(signature_node)
+
+        # Verify
+        ctx = xmlsec.SignatureContext()
+        ctx.key = key.sign_key
+        ctx.verify(signature_node)
 
     def test_certificate(self):
         # Generate new key
