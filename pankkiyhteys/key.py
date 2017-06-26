@@ -44,7 +44,7 @@ from lxml.etree import QName
 from zeep import ns
 from zeep.utils import detect_soap_env
 from zeep.wsse.signature import MemorySignature
-from zeep.wsse.utils import ensure_id, get_security_header
+from zeep.wsse.utils import get_security_header
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, asymmetric, serialization
@@ -62,6 +62,8 @@ Hash primitive to use in cryptographinc operations.
 This is chosen form accepted hash functions in Web services
 documentation
 """
+
+ID_ATTR = etree.QName(ns.WSU, 'Id')
 
 class Key:
     """
@@ -114,8 +116,6 @@ class Key:
         if not isinstance(key, asymmetric.rsa.RSAPrivateKey):
             # Load key from bytes, assume PEM encoded
             key = serialization.load_pem_private_key(key, password, default_backend())
-
-            logger.info('Loading private key <%s>' % hashlib.sha256(key).hexdigest())
 
             # PEM files could contain DSA or elliptic curve keys
             if not isinstance(key, asymmetric.rsa.RSAPrivateKey):
@@ -205,7 +205,7 @@ class Key:
 
     @property
     def fingerprint(self):
-        return hashlib.sha256(self.private_key()).hexdigest())
+        return hashlib.sha256(self.private_key()).hexdigest()
 
     @property
     def valid_duration(self):
@@ -247,7 +247,8 @@ class Key:
         ctx.key = self.sign_key
 
         # Add the <ds:Reference/> node to the signature template.
-        ref = xmlsec.template.add_reference(signature_node, xmlsec.Transform.SHA1)
+        ref = xmlsec.template.add_reference(
+            signature_node, xmlsec.Transform.SHA1, uri="")
 
         # Add the enveloped transform descriptor.
         xmlsec.template.add_transform(ref, xmlsec.Transform.ENVELOPED)
@@ -372,6 +373,23 @@ def verify(envelope, cert):
     ctx.key = key
     ctx.verify(signature)
 
+def _replace_body(envelope):
+    soap_env = detect_soap_env(envelope)
+
+    old = envelope.find(QName(soap_env, 'Body'))
+
+    nsmap = old.nsmap
+    nsmap.update({'wsu': ns.WSU})
+
+    body = etree.Element(QName(soap_env, 'Body'), nsmap=nsmap)
+
+    # Copy children
+    for child in old:
+        body.append(child)
+
+    # Replace body element
+    envelope.replace(old, body)
+
 def sign_envelope_with_key(envelope, key):
     # Create the Signature node.
     signature = xmlsec.template.create(
@@ -394,18 +412,20 @@ def sign_envelope_with_key(envelope, key):
     security = get_security_header(envelope)
     security.set(QName(soap_env, 'mustUnderstand'), '1')
 
+    # Add timestamp
+    _add_timestamp(security)
+
     # Insert the Signature node in the wsse:Security header.
     security.append(bst)
     security.append(signature)
 
-    # Add timestamp
-    _add_timestamp(security)
-
     ctx = xmlsec.SignatureContext()
     ctx.key = key.sign_key
 
-    _sign_node(ctx, signature, envelope.find(QName(soap_env, 'Body')))
+    _replace_body(envelope)
+
     _sign_node(ctx, signature, security.find(QName(ns.WSU, 'Timestamp')))
+    _sign_node(ctx, signature, envelope.find(QName(soap_env, 'Body')))
 
     # Perform the actual signing.
     ctx.sign(signature)
@@ -413,6 +433,25 @@ def sign_envelope_with_key(envelope, key):
     signature = xmlsec.tree.find_node(envelope, xmlsec.constants.NodeSignature)
     signature_value = signature.find(QName(xmlsec.constants.DSigNs, 'SignatureValue'))
     signature_value.text = "".join(signature_value.text.split())
+
+def _ensure_id(node):
+    """Ensure given node has a wsu:Id attribute; add unique one if not.
+    Return found/created attribute value.
+    """
+
+    def local_tag(elem):
+        """Remove namespace from the passed node."""
+        i = elem.tag.find('}')
+        if i >= 0:
+            return elem.tag[i + 1:]
+        return elem.tag
+
+    assert node is not None
+    id_val = node.get(ID_ATTR)
+    if not id_val:
+        id_val = '{0}-{1}'.format(local_tag(node), str(uuid.uuid4()))
+        node.set(ID_ATTR, id_val)
+    return id_val
 
 def _sign_node(ctx, signature, target):
     """Add sig for ``target`` in ``signature`` node, using ``ctx`` context.
@@ -424,7 +463,7 @@ def _sign_node(ctx, signature, target):
     """
 
     # Ensure the target node has a wsu:Id attribute and get its value.
-    node_id = ensure_id(target)
+    node_id = _ensure_id(target)
 
     # Unlike HTML, XML doesn't have a single standardized Id. WSSE suggests the
     # use of the wsu:Id attribute for this purpose, but XMLSec doesn't
@@ -442,4 +481,4 @@ def _sign_node(ctx, signature, target):
     # signature.
     transform = xmlsec.template.add_transform(ref, xmlsec.Transform.EXCL_C14N)
 
-    # xmlsec.template.transform_add_c14n_inclusive_namespaces(transform, "")
+    xmlsec.template.transform_add_c14n_inclusive_namespaces(transform, "")

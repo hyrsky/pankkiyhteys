@@ -388,20 +388,6 @@ class OPWebService(WebService, OPService):
 
         return data
 
-    def test(self):
-        # Make request
-        response = self.service.service.downloadFileList(
-            self._request_header(), b''  # zeep will b64encode string
-        )
-
-        header = self._response_header(response.ResponseHeader)
-        response = etree.fromstring(response.ApplicationResponse)
-
-        # Verify signature
-        self.verify(response)
-
-        return Response(header, self._get_files(response))
-
     def file_list(self, *, status='NEW', start_date=None, end_date=None):
         request = OPWebService.ApplicationRequest.get_file_list(
             self.client, status=status, start_date=start_date, end_date=end_date
