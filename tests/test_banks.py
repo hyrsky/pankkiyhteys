@@ -1,7 +1,7 @@
 import unittest
 import unittest.mock as mock
 import random
-import utils
+from .utils import create_test_key
 from datetime import datetime
 
 from lxml import etree
@@ -20,7 +20,7 @@ class ServiceTestSuite(unittest.TestCase):
         return TestClient()
 
     def test_signed_application_request(self):
-        key = utils.create_test_key()
+        key = create_test_key()
 
         E = ElementMaker(namespace="http://op.fi/mlp/xmldata/",
                          nsmap={None: "http://op.fi/mlp/xmldata/"})
@@ -118,7 +118,77 @@ class ServiceTestSuite(unittest.TestCase):
         assert isinstance(service, banks.WebService)
 
 class OsuuspankkiWebServiceTestSuite(unittest.TestCase):
-    pass
+    def create_mock_client(self):
+        client = mock.Mock()
+        client.username = '1234567890'
+        client.key = mock.Mock()
+        client.country = 'FI'
+        client.bank = banks.Bank.Osuuspankki
+        client.environment = banks.Environment.TEST
+
+        return client
+
+    def test_get_files_from_response(self):
+        client = self.create_mock_client()
+        wsdl_client = mock.Mock()
+
+        service = banks.OPWebService(client, wsdl_client)
+
+        xml = etree.fromstring("""
+            <ApplicationResponse xmlns="http://bxd.fi/xmldata/">
+            <CustomerId>1234567890</CustomerId>
+            <Timestamp>2017-06-26T21:20:12.796+03:00</Timestamp>
+            <ResponseCode>00</ResponseCode>
+            <ResponseText>OK.</ResponseText>
+            <FileDescriptors>
+                <FileDescriptor>
+                    <FileReference>231544</FileReference>
+                    <TargetId>MLP</TargetId>
+                    <UserFilename>rj-231544</UserFilename>
+                    <FileType>TM</FileType>
+                    <FileTimestamp>2017-06-26T09:00:36.184+03:00</FileTimestamp>
+                    <Status>NEW</Status>
+                    <ForwardedTimestamp>2017-06-26T09:00:36.184+03:00</ForwardedTimestamp>
+                </FileDescriptor>
+            </FileDescriptors>
+            </ApplicationResponse>
+        """)
+
+        files = service._get_files(xml)
+
+        assert isinstance(files, list)
+        assert len(files) == 1
+        assert files[0].reference == '231544'
+        assert files[0].type == 'TM'
+        assert files[0].status == 'NEW'
+        assert isinstance(files[0].timestamp, datetime)
+
+    def test_file_list(self):
+        client = self.create_mock_client()
+
+        response = mock.Mock()
+        response.ResponseHeader.ResponseCode = '00'
+        response.ResponseHeader.ResponseText = 'OK.'
+        response.ResponseHeader.Timestamp = datetime.utcnow()
+        response.ApplicationResponse = '<ApplicationResponse></ApplicationResponse>'
+
+        wsdl_client = mock.Mock()
+        wsdl_client.service.downloadFileList.return_value = response
+
+        service = banks.OPWebService(client, wsdl_client)
+        service.verify = mock.Mock()
+        service.file_list()
+
+        # Validate ApplicationRequest schema
+        with open('tests/xsd/ApplicationRequest_20080918.xsd') as xsd:
+            xml = etree.parse(xsd)
+            schema = etree.XMLSchema(xml)
+
+        assert wsdl_client.service.downloadFileList.called
+
+        # Validate request schema
+        args, kwargs = wsdl_client.service.downloadFileList.call_args
+        schema.assertValid(etree.fromstring(args[1]))
 
 class OsuuspankkiCertServiceTestSuite(unittest.TestCase):
     def test_service_certificate(self):
@@ -163,7 +233,7 @@ class OsuuspankkiCertServiceTestSuite(unittest.TestCase):
         """
 
         # Setup
-        key = utils.create_test_key()
+        key = create_test_key()
 
         client = mock.Mock()
         client.username = '1234567890'

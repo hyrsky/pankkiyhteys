@@ -9,7 +9,7 @@ from cryptography.hazmat.primitives import asymmetric, serialization
 
 import pankkiyhteys
 import xmlsec
-import utils
+from .utils import create_test_key
 
 class TestWSSE(unittest.TestCase):
     def test_wsse(self):
@@ -29,7 +29,7 @@ class TestWSSE(unittest.TestCase):
             </soapenv:Envelope>
         """, parser=parser)
 
-        key = utils.create_test_key()
+        key = create_test_key()
 
         pankkiyhteys.key.sign_envelope_with_key(envelope, key)
 
@@ -114,7 +114,7 @@ class KeyTestSuite(unittest.TestCase):
         Test if signxml works
         """
 
-        key = utils.create_test_key()
+        key = create_test_key()
 
         E = ElementMaker(namespace="http://bxd.fi/xmldata/",
                          nsmap={None: "http://bxd.fi/xmldata/"})

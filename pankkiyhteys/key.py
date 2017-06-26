@@ -32,7 +32,6 @@ Todo:
 
 from datetime import datetime, timedelta
 
-import uuid
 import base64
 import logging
 import hashlib

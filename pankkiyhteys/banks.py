@@ -3,6 +3,9 @@ from lxml.builder import ElementMaker
 
 from enum import Enum, auto
 from datetime import datetime
+from dateutil.parser import parse
+import pytz
+
 
 import collections
 import logging
@@ -104,7 +107,7 @@ class Response:
 class File:
     def __init__(self, *, reference, timestamp, status, type, parent, target):
         self.reference = reference
-        self.timestamp = timestamp
+        self.timestamp = parse(timestamp).astimezone(pytz.utc)
         self.status = status
         self.type = type
         self.parent = parent
@@ -363,15 +366,18 @@ class OPWebService(WebService, OPService):
         values = []
 
         files = response.find('FileDescriptors', namespaces=response.nsmap)
-        for file in files:
-            values.append(File(
-                reference=file.find('FileReference'),
-                target=file.find('TargetId'),
-                parent=file.find('ParentFileReference'),
-                type=file.find('FileType'),
-                timestamp=file.find('FileTimestamp'),
-                status=file.find('Status'),
-            ))
+
+        if files is not None:
+            namespace = etree.QName(files).namespace
+            for file in files:
+                values.append(File(
+                    reference=file.findtext(etree.QName(namespace, 'FileReference')),
+                    target=file.findtext(etree.QName(namespace, 'TargetId')),
+                    parent=file.findtext(etree.QName(namespace, 'ParentFileReference')),
+                    type=file.findtext(etree.QName(namespace, 'FileType')),
+                    timestamp=file.findtext(etree.QName(namespace, 'FileTimestamp')),
+                    status=file.findtext(etree.QName(namespace, 'Status')),
+                ))
 
         return values
 
