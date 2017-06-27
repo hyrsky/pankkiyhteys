@@ -6,7 +6,6 @@ from datetime import datetime
 from dateutil.parser import parse
 import pytz
 
-
 import collections
 import logging
 import base64
@@ -146,8 +145,8 @@ class WebService(metaclass=abc.ABCMeta):
 
         Args:
             status (NEW|DLD): Filter new or downloaded files
-            start_date (Datetime): Filter by time
-            end_date (Datetime): Filter by time
+            start_date (Date): Filter by date
+            end_date (Date): Filter by date
         """
 
     @abc.abstractmethod
@@ -155,7 +154,7 @@ class WebService(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def upload_file(self, key):
+    def upload_file(self, target, type, file):
         pass
 
 class CertService(metaclass=abc.ABCMeta):
@@ -320,8 +319,8 @@ class OPWebService(WebService, OPService):
             Args:
                 client (pankkiyhteys.Client):
                 status (NEW|DLD): Filter new or downloaded files, default = NEW
-                start_date (Datetime): Filter by UTC date
-                end_date (Datetime): Filter by UTC date
+                start_date (Date): Filter by date
+                end_date (Date): Filter by date
 
             Return:
                 ApplicationRequest:
@@ -332,9 +331,9 @@ class OPWebService(WebService, OPService):
             )
 
             if start_date is not None:
-                request.append(cls.E.StartDate(start_date.isoformat() + 'Z'))
+                request.append(cls.E.StartDate(start_date.isoformat()))
             if end_date is not None:
-                request.append(cls.E.EndDate(end_date.isoformat() + 'Z'))
+                request.append(cls.E.EndDate(end_date.isoformat()))
 
             request.extend((
                 cls.E.Status(status),

@@ -296,7 +296,7 @@ class SignWSSE(MemorySignature):
 
     def apply(self, envelope, headers):
         """Override zeep.wsse.signature.MemorySignature.apply"""
-        sign_envelope_with_key(envelope, self.client.key)
+        sign(envelope, self.client.key)
 
         return envelope, headers
 
@@ -346,10 +346,11 @@ def _create_binary_security_token(key):
     return bst
 
 def verify(envelope, cert):
-    """Verify WS-Security signature on given SOAP envelope with given cert.
-    Expects a document like that found in the sample XML in the ``sign()``
-    docstring.
-    Raise SignatureValidationFailed on failure, silent on success.
+    """
+    Verify WS-Security signature on given SOAP envelope with given cert.
+
+    Raises:
+        SignatureValidationFailed: on failure, silent on success.
     """
     signature = xmlsec.tree.find_node(envelope, xmlsec.constants.NodeSignature)
 
@@ -372,7 +373,13 @@ def verify(envelope, cert):
     ctx.key = key
     ctx.verify(signature)
 
-def sign_envelope_with_key(envelope, key):
+def sign(envelope, key):
+    """
+    Add WS-Security signature on given SOAP envelope with given key.
+
+    Raises:
+        SignatureValidationFailed: on failure, silent on success.
+    """
     # Create the Signature node.
     signature = xmlsec.template.create(
         envelope,
