@@ -1,7 +1,7 @@
 from lxml import etree
 from lxml.builder import ElementMaker
 
-from enum import Enum, auto
+from enum import Enum
 from datetime import datetime
 from dateutil.parser import parse
 import pytz
@@ -21,7 +21,7 @@ Client software identifier sent to bank on each request
 """
 
 class Bank(Enum):
-    Osuuspankki = auto()
+    Osuuspankki = 'OKOYFIHH'
 
 class Environment(Enum):
     PRODUCTION = 0
@@ -298,7 +298,7 @@ class OPWebService(WebService, OPService):
             request = cls.E.ApplicationRequest(
                 cls.E.CustomerId(client.username),
                 cls.E.Timestamp(datetime.utcnow().isoformat() + 'Z'),
-                cls.E.Environment(client.environment.value),
+                cls.E.Environment(client.environment.name),
                 cls.E.FileReferences(
                     cls.E.FileReference(reference)
                 ),
@@ -312,13 +312,14 @@ class OPWebService(WebService, OPService):
             return cls(request)
 
         @classmethod
-        def get_file_list(cls, client, *, status='NEW', start_date=None, end_date=None):
+        def get_file_list(cls, client, *, status='NEW', file_type=None, start_date=None, end_date=None):
             """
             Create ApplicationRequest for requesting file list
 
             Args:
                 client (pankkiyhteys.Client):
                 status (NEW|DLD): Filter new or downloaded files, default = NEW
+                file_type (str): Specified the type of file in the request. Can be used as a filter.
                 start_date (Date): Filter by date
                 end_date (Date): Filter by date
 
@@ -341,6 +342,9 @@ class OPWebService(WebService, OPService):
                 cls.E.SoftwareId(SOFTWARE_ID)
             ))
 
+            if file_type is not None:
+                request.append(cls.E.FileType(file_type))
+
             return cls(request)
 
     def _request_header(self):
@@ -350,7 +354,7 @@ class OPWebService(WebService, OPService):
             Timestamp=datetime.utcnow(),
             Language='FI',
             UserAgent=SOFTWARE_ID,
-            ReceiverId='OKOYFIHH'
+            ReceiverId=Bank.Osuuspankki.value
         )
 
     def _response_header(self, response_header):
@@ -381,8 +385,8 @@ class OPWebService(WebService, OPService):
         return values
 
     def _get_file(self, response):
-        content = response.find('Content', namespace=response.nsmap)
-        compressed = response.find('Compressed', namespace=response.nsmap)
+        content = response.find('Content', namespaces=response.nsmap)
+        compressed = response.find('Compressed', namespaces=response.nsmap)
 
         if content is None:
             return None
@@ -393,9 +397,9 @@ class OPWebService(WebService, OPService):
 
         return data
 
-    def file_list(self, *, status='NEW', start_date=None, end_date=None):
+    def file_list(self, *, status='NEW', file_type=None, start_date=None, end_date=None):
         request = OPWebService.ApplicationRequest.get_file_list(
-            self.client, status=status, start_date=start_date, end_date=end_date
+            self.client, status=status, file_type=file_type, start_date=start_date, end_date=end_date
         )
 
         self.sign(request)
@@ -419,7 +423,7 @@ class OPWebService(WebService, OPService):
         self.sign(request)
 
         # Make request
-        response = self.service.service.getFile(
+        response = self.service.service.downloadFile(
             self._request_header(), request.to_string()  # zeep will b64encode string
         )
 

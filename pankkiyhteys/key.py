@@ -93,8 +93,8 @@ class Key:
         Construct key object
 
         Args:
-            key (bytes): RSA private key in PEM format
-            cert (bytes, optional): X509 certificate in DER format
+            key (bytes|file): RSA private key in PEM format
+            cert (bytes|file, optional): X509 certificate in DER format
             password (bytes, optional): Encrypted private key password
 
         Raises
@@ -124,6 +124,8 @@ class Key:
             # not now then maybe in the future
             if key.key_size < RSA_KEY_SIZE:
                 raise ValueError('Key size is not supported')
+        elif hasattr(key, 'read'):
+            key = key.read()
 
         self._private_key = key
 
@@ -137,6 +139,9 @@ class Key:
         elif isinstance(cert, x509.Certificate):
             self._cert = cert
         else:
+            if hasattr(cert, 'read'):
+                cert = cert.read()
+
             # Load x509 PEM certificate from bytes
             self._cert = x509.load_pem_x509_certificate(
                 cert, default_backend()

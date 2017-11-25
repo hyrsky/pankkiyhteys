@@ -10,7 +10,7 @@ setup(
     description='Communicate with Finnish banks',
     license='MIT License',
     author='Santeri Hurnanen',
-    author_email='hyrsky@riseup.net',
+    author_email='santeri@oikeuttaelaimille.fi',
     url='https://github.com/hyrsky/Pankkiyhteys',
     packages=['pankkiyhteys', 'pankkiyhteys.b2c', 'pankkiyhteys.finvoice'],
 )
