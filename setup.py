@@ -12,5 +12,5 @@ setup(
     author='Santeri Hurnanen',
     author_email='santeri@oikeuttaelaimille.fi',
     url='https://github.com/hyrsky/Pankkiyhteys',
-    packages=['pankkiyhteys', 'pankkiyhteys.b2c', 'pankkiyhteys.finvoice'],
+    packages=['pankkiyhteys'],
 )
