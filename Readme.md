@@ -28,7 +28,7 @@ print(client.get_file_list())
 
 Install requirements and run
 ```
-nosetests
+python -m unittest
 ```
 
 Count code coverage
