@@ -7,38 +7,43 @@ primitives required by web services.
 Examples:
     Generating new key and get certificate
 
-        client = pankkiyhteys.Client(...)
-        key = pankkiyhteys.Key.generate()
-        key = pankkiyhteys.certify(key, client, '1234567890123456')
+        >>> client = pankkiyhteys.Client(...)
+        >>> key = pankkiyhteys.Key.generate()
+        >>> key = pankkiyhteys.certify(key, client, '1234567890123456')
 
     Renew certificate that is about to expire
 
-        client = pankkiyhteys.client(...)
-        key = pankkiyhteys.Key(...)
-        if key.valid() and key.valid_duration < datetime.timedelta(days=60)
-            key = pankkiyhteys.key.certify(key, client)
+        >>> client = pankkiyhteys.client(...)
+        >>> key = pankkiyhteys.Key(...)
+        >>> if key.valid() and key.valid_duration < datetime.timedelta(days=60)
+                key = pankkiyhteys.key.certify(key, client)
 
     Save key and certificate to files
 
-        with open('key.pem', 'wb') as keyfile, open('cert.pem', 'wb') as certfile:
-            keyfile.write(key.private_key())
-            certfile.write(key.certificate())
+        >>> with open('key.pem', 'wb') as keyfile,
+                    open('cert.pem', 'wb') as certfile:
+                keyfile.write(key.private_key())
+                certfile.write(key.certificate())
 
 Todo:
-    * Implement pankkiyhteys.key.certify()
-    * Change all Exceptions to some other exception type
-    * Make unit tests
+    * Certificate chain validation in CertificateHandler
+      https://stackoverflow.com/a/49282746
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import base64
 import logging
 import hashlib
 import xmlsec
+import codecs
+
+import urllib.request
+import urllib.error
 
 from lxml import etree
-from lxml.etree import QName
+
+from OpenSSL import crypto
 
 from zeep import ns
 from zeep.utils import detect_soap_env
@@ -62,7 +67,13 @@ This is chosen form accepted hash functions in Web services
 documentation
 """
 
+WSS_BASE = 'http://docs.oasis-open.org/wss/2004/01/'
+
+BASE64B = WSS_BASE + 'oasis-200401-wss-soap-message-security-1.0#Base64Binary'
+X509TOKEN = WSS_BASE + 'oasis-200401-wss-x509-token-profile-1.0#X509v3'
+
 ID_ATTR = etree.QName(ns.WSU, 'Id')
+
 
 class Key:
     """
@@ -105,16 +116,20 @@ class Key:
                 encrypted. Or if the key was encrypted but no password was
                 supplied.
             cryptography.exceptions.UnsupportedAlgorithm: If the serialized
-                key is of a type that is not supported by the backend or if the key
-                is encrypted with a symmetric cipher that is not supported by the
-                backend.
+                key is of a type that is not supported by the backend or if
+                the key is encrypted with a symmetric cipher that is not
+                supported by the backend.
         """
 
         self.logger = logging.getLogger(__name__)
 
+        if hasattr(key, 'read'):
+            key = key.read()
+
         if not isinstance(key, asymmetric.rsa.RSAPrivateKey):
             # Load key from bytes, assume PEM encoded
-            key = serialization.load_pem_private_key(key, password, default_backend())
+            key = serialization.load_pem_private_key(key, password,
+                                                     default_backend())
 
             # PEM files could contain DSA or elliptic curve keys
             if not isinstance(key, asymmetric.rsa.RSAPrivateKey):
@@ -124,13 +139,12 @@ class Key:
             # not now then maybe in the future
             if key.key_size < RSA_KEY_SIZE:
                 raise ValueError('Key size is not supported')
-        elif hasattr(key, 'read'):
-            key = key.read()
 
         self._private_key = key
 
         # Create xmlsec key
-        self.sign_key = xmlsec.Key.from_memory(self.private_key(), xmlsec.KeyFormat.PEM)
+        self.sign_key = xmlsec.Key.from_memory(self.private_key(),
+                                               xmlsec.KeyFormat.PEM)
 
         if cert is None:
             # Certificate can be None if the program just created the
@@ -144,12 +158,12 @@ class Key:
 
             # Load x509 PEM certificate from bytes
             self._cert = x509.load_pem_x509_certificate(
-                cert, default_backend()
-            )
+                cert, default_backend())
 
         # Add certificate to xmlsec key
         if self.valid():
-            self.sign_key.load_cert_from_memory(self.certificate(), xmlsec.KeyFormat.PEM)
+            self.sign_key.load_cert_from_memory(self.certificate(),
+                                                xmlsec.KeyFormat.PEM)
 
     def private_key(self, password=None):
         """
@@ -166,7 +180,8 @@ class Key:
         if password is None:
             encryption_algorithm = serialization.NoEncryption()
         else:
-            encryption_algorithm = serialization.BestAvailableEncryption(password)
+            encryption_algorithm = serialization.BestAvailableEncryption(
+                password)
 
         return self._private_key.private_bytes(
             encoding=serialization.Encoding.PEM,
@@ -194,8 +209,8 @@ class Key:
 
     def valid(self):
         """
-        Check if the certificate is considered valid. This does
-        not check if the certificate is revoked.
+        Check if the certificate is considered valid. This does not check if
+        the certificate is revoked.
 
         Returns:
             bool: True if library considers this certificate valid.
@@ -282,63 +297,244 @@ class Key:
 
         return csr.public_bytes(serialization.Encoding.DER)
 
-def validate(data):
-    """Validate xml signature"""
-    return False
 
 def load_certificate(data):
     """Load der encoded certificate into pem encoded bytes"""
     return (x509.load_der_x509_certificate(data, default_backend())
                 .public_bytes(encoding=serialization.Encoding.PEM))
 
-class SignWSSE(MemorySignature):
+
+class CertificateHandler(MemorySignature):
     """
-    Zeep doesn't insert required timestamp to wsse header
+    Custom wsse handler for zeep.
+
+    Check if certificate in the request is trusted and also correctly insert
+    timestamp to wsse header.
+
+    TODO
+        * This class could benefit from caching
+          -> cache revocation list to dist
     """
 
-    def __init__(self, client):
-        self.client = client
+    def __init__(self):
+        self.key = None
+        self.crl = None
+        self.crl_url = None
+
+    def _log_cert(self, message, cert):
+        cert = cert.to_cryptography()
+        fingerprint = cert.fingerprint(HASH_FUNCTION())
+        fingerprint = '0x{}'.format(codecs.encode(fingerprint, 'hex').decode())
+        common_name = cert.subject.get_attributes_for_oid(
+            x509.oid.NameOID.COMMON_NAME)[0].value
+
+        self.logger.info(message, common_name, fingerprint)
+
+    def init(self, key, ca, crl_url, logger):
+        self.key = key
+        self.ca = crypto.load_certificate(crypto.FILETYPE_PEM, ca)
+        self.intermediaries = []
+        self.crl_url = crl_url
+
+        self.logger = logger
+        self._log_cert("Trusting CA \"%s\" <%s>", self.ca)
+
+    def add_intermediary(self, cert_buffer, *,
+                         cert_encoding=crypto.FILETYPE_ASN1):
+        if self.should_refresh():
+            try:
+                self.refresh_revocation_list()
+            except (urllib.error.URLError, urllib.error.HTTPError) as e:
+                raise ValueError('Unable to verify intermediary certificate')
+
+        try:
+            # Warning validation of certificate chains is not properly
+            # supported by any major python crypto library.
+            # See: https://stackoverflow.com/a/49282746
+            store = crypto.X509Store()
+            store.add_cert(self.ca)
+            store.add_crl(crypto.CRL.from_cryptography(self.crl))
+
+            cert = crypto.load_certificate(cert_encoding, cert_buffer)
+            store_ctx = crypto.X509StoreContext(store, cert)
+            store_ctx.verify_certificate()
+
+            # Intermediary passed validation
+            self._log_cert("Trusting intermediary \"%s\" <%s>", cert)
+            self.intermediaries.append(cert)
+
+        # Exception is thrown when verification fails
+        except crypto.X509StoreContextError as e:
+            raise ValueError('Unable to verify intermediary certificate')
 
     def apply(self, envelope, headers):
         """Override zeep.wsse.signature.MemorySignature.apply"""
-        sign(envelope, self.client.key)
+        sign(envelope, self.key)
 
         return envelope, headers
 
     def verify(self, envelope):
         """Override zeep.wsse.signature.MemorySignature.verify"""
-        # TODO
+
+        cert = self.get_certificate(envelope)
+        if cert is None or not self.is_cert_trusted(cert):
+            raise ValueError('Could not verify certificate')
+
+        verify(envelope, cert, encoding=xmlsec.constants.KeyDataFormatCertDer)
 
         return envelope
 
+    def get_certificate(self, envelope):
+        """Find and return certificate from the XML document
 
-WSS_BASE = 'http://docs.oasis-open.org/wss/2004/01/'
+        Return:
+            bytes: DER encoded bytes. None if no certificate found.
+        """
 
-BASE64B = WSS_BASE + 'oasis-200401-wss-soap-message-security-1.0#Base64Binary'
-X509TOKEN = WSS_BASE + 'oasis-200401-wss-x509-token-profile-1.0#X509v3'
+        def get_keyinfo(security):
+            keyinfo = security.xpath(
+                "./ds:Signature/ds:KeyInfo",
+                namespaces={
+                    'ds': xmlsec.constants.DSigNs,
+                })
+
+            if len(keyinfo) != 1:
+                return None
+
+            return keyinfo[0]
+
+        def get_security(envelope):
+            security = envelope.xpath(
+                './/wsse:Security', namespaces={'wsse': ns.WSSE})
+
+            if len(security) != 1:
+                return None
+
+            return security[0]
+
+        # FIXME: ApplicationReqeust doesn't have security header
+        security = get_security(envelope)
+        if security is None:
+            return None
+
+        keyinfo = get_keyinfo(security)
+        if keyinfo is None:
+            return None
+
+        reference = keyinfo.xpath(
+            "./wsse:SecurityTokenReference/wsse:Reference",
+            namespaces={
+                'ds': xmlsec.constants.DSigNs,
+                'wsse': ns.WSSE,
+            })
+
+        if len(reference) == 1:
+            # Certificate is in BinarySecurityToken element.
+
+            bst = security.xpath(
+                ".//wsse:BinarySecurityToken[@wsu:Id = '{}']".format(
+                    reference[0].attrib['URI'].lstrip('#')),
+                namespaces={
+                    'wsse': ns.WSSE,
+                    'wsu': ns.WSU
+                })
+
+            if len(bst) == 1:
+                bst = bst[0]
+                encoding = bst.attrib.get('EncodingType')
+                value_type = bst.attrib.get('ValueType')
+
+                # Only base64 encoded x509 is supported
+                if encoding == BASE64B and value_type == X509TOKEN:
+                    return base64.b64decode(bst.text)
+
+        """
+        elif len(reference) == 0:
+            # Certificate is in X509Certificate element
+            certificate = keyinfo.xpath(
+                "//ds:X509Certificate",
+                namespaces={'ds': xmlsec.constants.DSigNs})
+
+            if len(certificate) == 1:
+                return certificate[0].text
+        """
+
+        return None
+
+    def should_refresh(self):
+        return self.crl is None or self.crl.next_update > datetime.now()
+
+    def refresh_revocation_list(self):
+        """Refresh certificate revocation list"""
+        self.logger.info("Refreshing revocation list")
+        with urllib.request.urlopen(self.crl_url) as response:
+            self.crl = x509.load_der_x509_crl(response.read(),
+                                              default_backend())
+
+    def is_cert_trusted(self, cert_buffer, *,
+                        cert_encoding=crypto.FILETYPE_ASN1):
+        """Return true if certificate is considered trusted
+
+        Certificate is trusted if it is signed by trusted certificate
+        authority and it is not expired or revoked.
+
+        Args:
+            cert_buffer (bytes): DER encoded certificate
+        """
+        # If revocation list should be updated
+        if self.should_refresh():
+            try:
+                self.refresh_revocation_list()
+            except (urllib.error.URLError, urllib.error.HTTPError) as e:
+                return False
+
+        try:
+            # Warning validation of certificate chains is not properly
+            # supported by any major python crypto library.
+            # See: https://stackoverflow.com/a/49282746
+            store = crypto.X509Store()
+            store.add_cert(self.ca)
+            store.add_crl(crypto.CRL.from_cryptography(self.crl))
+
+            # Intermediaries here are validated beforehand
+            for intermediary in self.intermediaries:
+                store.add_cert(intermediary)
+
+            cert = crypto.load_certificate(cert_encoding, cert_buffer)
+            store_ctx = crypto.X509StoreContext(store, cert)
+            store_ctx.verify_certificate()
+
+            return True
+
+        # Exception is thrown when verification fails
+        except crypto.X509StoreContextError as e:
+            return False
+
 
 """
-Code below this is adapted from zeep wsse module. Their code
-didn't work correctly for me so I had to patch it
-
-Todo:
+Code below this is adapted from zeep wsse module. Their code didn't add
+the required timestamp header.
 """
+
 
 def _add_timestamp(node):
-    timestamp = etree.Element(QName(ns.WSU, 'Timestamp'), nsmap={'wsu': ns.WSU})
+    timestamp = etree.Element(
+        etree.QName(ns.WSU, 'Timestamp'), nsmap={'wsu': ns.WSU})
 
-    created = datetime.utcnow().replace(microsecond=0)
-    expires = (created + timedelta(hours=1)).isoformat() + 'Z'
-    created = created.isoformat() + 'Z'
+    created = datetime.now(timezone.utc)
+    expires = (created + timedelta(hours=1))
+    created = created.isoformat(timespec='seconds').replace('+00:00', 'Z')
+    expires = expires.isoformat(timespec='seconds').replace('+00:00', 'Z')
 
-    etree.SubElement(timestamp, QName(ns.WSU, 'Created')).text = created
-    etree.SubElement(timestamp, QName(ns.WSU, 'Expires')).text = expires
+    etree.SubElement(timestamp, etree.QName(ns.WSU, 'Created')).text = created
+    etree.SubElement(timestamp, etree.QName(ns.WSU, 'Expires')).text = expires
 
     node.append(timestamp)
 
+
 def _create_binary_security_token(key):
     bst = etree.Element(
-        QName(ns.WSSE, 'BinarySecurityToken'),
+        etree.QName(ns.WSSE, 'BinarySecurityToken'),
         ValueType=X509TOKEN,
         EncodingType=BASE64B,
         nsmap={'wsu': ns.WSU})
@@ -350,9 +546,11 @@ def _create_binary_security_token(key):
 
     return bst
 
-def verify(envelope, cert):
-    """
-    Verify WS-Security signature on given SOAP envelope with given cert.
+
+def verify(envelope, cert, *, encoding=xmlsec.constants.KeyDataFormatCertPem):
+    """Verify WS-Security signature on XML document with given cert.
+
+    No certificate validation is performed
 
     Raises:
         SignatureValidationFailed: on failure, silent on success.
@@ -373,10 +571,11 @@ def verify(envelope, cert):
         )[0]
         ctx.register_id(referenced, 'Id', ns.WSU)
 
-    key = xmlsec.Key.from_memory(cert, xmlsec.KeyFormat.CERT_PEM, None)
+    key = xmlsec.Key.from_memory(cert, encoding)
 
     ctx.key = key
     ctx.verify(signature)
+
 
 def sign(envelope, key):
     """
@@ -397,14 +596,16 @@ def sign(envelope, key):
     # Add a KeyInfo node with SecurityTokenReference child to the Signature.
     # Add Reference to BinarySecurityToken to SecurityTokenReference
     key_info = xmlsec.template.ensure_key_info(signature)
-    security_token = etree.SubElement(key_info, QName(ns.WSSE, 'SecurityTokenReference'))
-    etree.SubElement(security_token, QName(ns.WSSE, 'Reference'),
+    security_token = etree.SubElement(key_info,
+                                      etree.QName(ns.WSSE,
+                                                  'SecurityTokenReference'))
+    etree.SubElement(security_token, etree.QName(ns.WSSE, 'Reference'),
                      ValueType=X509TOKEN,
-                     URI='#' + bst.get(QName(ns.WSU, 'Id')))
+                     URI='#' + bst.get(etree.QName(ns.WSU, 'Id')))
 
     soap_env = detect_soap_env(envelope)
     security = get_security_header(envelope)
-    security.set(QName(soap_env, 'mustUnderstand'), '1')
+    security.set(etree.QName(soap_env, 'mustUnderstand'), '1')
 
     # Add timestamp
     _add_timestamp(security)
@@ -416,11 +617,12 @@ def sign(envelope, key):
     ctx = xmlsec.SignatureContext()
     ctx.key = key.sign_key
 
-    _sign_node(ctx, signature, security.find(QName(ns.WSU, 'Timestamp')))
-    _sign_node(ctx, signature, envelope.find(QName(soap_env, 'Body')))
+    _sign_node(ctx, signature, security.find(etree.QName(ns.WSU, 'Timestamp')))
+    _sign_node(ctx, signature, envelope.find(etree.QName(soap_env, 'Body')))
 
     # Perform the actual signing.
     ctx.sign(signature)
+
 
 def _sign_node(ctx, signature, target):
     """Add sig for ``target`` in ``signature`` node, using ``ctx`` context.

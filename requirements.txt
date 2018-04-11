@@ -1,6 +1,5 @@
 lxml
-python-dateutil
-pytz
 zeep
 cryptography
 xmlsec
+pyopenssl

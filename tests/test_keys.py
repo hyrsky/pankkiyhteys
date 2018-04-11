@@ -1,173 +1,182 @@
 import unittest
 
-from datetime import datetime, timedelta
-from lxml.builder import ElementMaker
+from datetime import timedelta
 from lxml import etree
-from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import asymmetric, serialization
 
 import pankkiyhteys
 import xmlsec
-from .utils import create_test_key
+import io
 
-class TestWSSE(unittest.TestCase):
-    def test_wsse(self):
-        parser = etree.XMLParser(remove_blank_text=True)
-        envelope = etree.fromstring("""
-            <soapenv:Envelope
-                xmlns:tns="http://tests.python-zeep.org/"
-                xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
-                xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/">
-              <soapenv:Header></soapenv:Header>
-              <soapenv:Body>
-                <tns:Function>
-                  <tns:Argument>OK</tns:Argument>
-                </tns:Function>
-              </soapenv:Body>
-            </soapenv:Envelope>
-        """, parser=parser)
+from .utils import (
+    create_test_key, generate_rsa_key, create_unsigned_application_request,
+    assert_valid_schema, sign_cert)
+
+SOAP_XML = """<soapenv:Envelope xmlns:tns="http://tests.python-zeep.org/"
+        xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+        xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+        xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/">
+    <soapenv:Header></soapenv:Header>
+    <soapenv:Body>
+        <tns:Function>
+            <tns:Argument>OK</tns:Argument>
+        </tns:Function>
+    </soapenv:Body>
+</soapenv:Envelope>"""
+
+
+class TestXMLSigning(unittest.TestCase):
+    def test_sign(self):
+        """XML signed with sign() should successfully verify with xmlsec"""
+
+        envelope = etree.fromstring(
+            SOAP_XML, parser=etree.XMLParser(remove_blank_text=True))
 
         key = create_test_key()
 
-        pankkiyhteys.key.sign_envelope_with_key(envelope, key)
+        pankkiyhteys.key.sign(envelope, key)
 
-        print(etree.tostring(envelope, pretty_print=True).decode())
+        # print(etree.tostring(envelope, pretty_print=True).decode())
 
-        signature_node = xmlsec.tree.find_node(envelope, xmlsec.constants.NodeSignature)
+        signature_node = xmlsec.tree.find_node(
+            envelope, xmlsec.constants.NodeSignature)
 
-        # Verify
+        # Verify - throws an error on failure
         ctx = xmlsec.SignatureContext()
         ctx.key = key.sign_key
         ctx.verify(signature_node)
 
+    def test_verify(self):
+        """XML signed with sign() should successfully verify with verify()"""
+
+        envelope = etree.fromstring(
+            SOAP_XML, parser=etree.XMLParser(remove_blank_text=True))
+
+        key = create_test_key()
+
+        pankkiyhteys.key.sign(envelope, key)
+
+        # Verify - throws an error on failure
+        pankkiyhteys.key.verify(envelope, key.certificate())
+
+
+class CertificateHandlerTestSuite(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        pass
+
+    """TODO"""
+
+
 class KeyTestSuite(unittest.TestCase):
-    def sign_cert(self, key, *,
-                  not_valid_before=datetime.utcnow(),
-                  duration=timedelta(days=1)):
-        """
-        Helper function to create self signed certificate
+    @classmethod
+    def setUpClass(cls):
+        # Load private with a password
+        cls.key = create_test_key()
+        cls.key_no_cert = create_test_key(create_cert=False)
+        cls.password = b'mypassword'
+        cls.protected_private_key = generate_rsa_key().private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.BestAvailableEncryption(
+                cls.password))
 
-        Returns:
-            cryptography.x509.Certificate:
-        """
-        subject = issuer = x509.Name([
-            x509.NameAttribute(x509.oid.NameOID.COUNTRY_NAME, 'FI'),
-            x509.NameAttribute(x509.oid.NameOID.ORGANIZATION_NAME, 'My Company'),
-            x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, '1234567890'),
-        ])
-
-        return (x509.CertificateBuilder()
-                    .subject_name(subject)
-                    .issuer_name(issuer)
-                    .public_key(key._private_key.public_key())
-                    .serial_number(x509.random_serial_number())
-                    .not_valid_before(not_valid_before)
-                    .not_valid_after(not_valid_before + duration)
-                    .sign(key._private_key, pankkiyhteys.key.HASH_FUNCTION(),
-                          default_backend()))
-
-    def test_key(self):
+    def test_invalid_keys(self):
+        """Test loading invalid keys"""
         # Try invalid key type
         with self.assertRaises(ValueError):
             private_key = asymmetric.dsa.generate_private_key(
                 key_size=1024,
-                backend=default_backend()
-            )
-            pankkiyhteys.Key(private_key.private_bytes(
+                backend=default_backend())
+            pankkiyhteys.key.Key(private_key.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption()
-            ))
+                encryption_algorithm=serialization.NoEncryption()))
 
         # Try invalid key size
         with self.assertRaises(ValueError):
-            private_key = asymmetric.rsa.generate_private_key(
-                key_size=1024,
-                public_exponent=65537,
-                backend=default_backend()
-            )
-            pankkiyhteys.Key(private_key.private_bytes(
+            private_key = generate_rsa_key(1024)
+            pankkiyhteys.key.Key(private_key.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption()
-            ))
+                encryption_algorithm=serialization.NoEncryption()))
 
         # Generate new key
-        key = pankkiyhteys.Key.generate()
+        key = pankkiyhteys.key.Key.generate()
         private_key = key.private_key()
-        assert isinstance(key, pankkiyhteys.Key)
-        assert not key.valid()  # <- No certificate
+        assert isinstance(key, pankkiyhteys.key.Key)
 
-        # Export encrypted private and try to load it
-        protected_private_key = key.private_key(b'mypassword')
-        key = pankkiyhteys.Key(protected_private_key, password=b'mypassword')
-        assert isinstance(key, pankkiyhteys.Key)
+    def test_passwords(self):
+        """Test loading private key that has a password"""
+        key = pankkiyhteys.key.Key(
+            self.protected_private_key, password=self.password)
+        assert isinstance(key, pankkiyhteys.key.Key)
 
-        # Try to load private key with incorrect password
+    def test_export_key_with_password(self):
+        """Test exporting private with password and then loading it again"""
+        key = pankkiyhteys.key.Key(
+            self.protected_private_key, password=self.password)
+        protected_private_key = key.private_key(self.password)
+        key = pankkiyhteys.key.Key(
+            protected_private_key, password=self.password)
+        assert isinstance(key, pankkiyhteys.key.Key)
+
+    def test_wrong_password(self):
+        """Test loading private key with incorrect password"""
         with self.assertRaises(ValueError):
-            key = pankkiyhteys.Key(protected_private_key, password=b'notmypassword')
+            pankkiyhteys.key.Key(
+                self.protected_private_key,
+                password=b'notmypassword')
 
-    def test_sign(self):
-        """
-        Test if signxml works
-        """
+    def test_load_key_from_file(self):
+        key = io.BytesIO()
+        key.write(self.key.private_key())
+        key.seek(0)
 
-        key = create_test_key()
+        cert = io.BytesIO()
+        cert.write(self.key.certificate())
+        cert.seek(0)
 
-        E = ElementMaker(namespace="http://bxd.fi/xmldata/",
-                         nsmap={None: "http://bxd.fi/xmldata/"})
+        key = pankkiyhteys.key.Key(key, cert)
+        assert isinstance(key, pankkiyhteys.key.Key)
 
-        root = E.ApplicationRequest(
-            E.CustomerId('1000000000'),
-            E.Timestamp('2011-08-15T09:48:31.177+03:00'),
-            E.Status('NEW'),
-            E.Environment('TEST'),
-            E.SoftwareId('soft'))
+    def test_signature_schema(self):
+        """Test xml signature schema"""
 
-        key.sign(root)
+        root = create_unsigned_application_request()
 
-        # Validate ApplicationRequest schema
-        with open('tests/xsd/xmldsig-core-schema.xsd') as xsd:
-            schema = etree.XMLSchema(etree.parse(xsd))
+        self.key.sign(root)
 
-        root = etree.tostring(root).decode()
-        root = etree.fromstring(root)
+        # Validate signed document passess ApplicationRequest schema
+        signature_node = xmlsec.tree.find_node(
+            root, xmlsec.constants.NodeSignature)
 
-        signature_node = xmlsec.tree.find_node(root, xmlsec.constants.NodeSignature)
+        assert_valid_schema('xmldsig-core-schema.xsd', signature_node)
 
-        schema.assertValid(signature_node)
-
-        # Verify
+        # Verify signature
         ctx = xmlsec.SignatureContext()
-        ctx.key = key.sign_key
+        ctx.key = self.key.sign_key
         ctx.verify(signature_node)
 
-    def test_certificate(self):
-        # Generate new key
-        key = pankkiyhteys.Key.generate()
-        private_key = key.private_key()
-        assert isinstance(key, pankkiyhteys.Key)
-        assert not key.valid()  # <- No certificate
-
+    def test_key_without_certificate(self):
         # Try to export certificate
         with self.assertRaises(AttributeError):
-            cert = key.certificate()
+            self.key_no_cert.certificate()
 
         # Try to check valid duration
         with self.assertRaises(AttributeError):
-            cert = key.valid_duration
+            self.key_no_cert.valid_duration
 
+    def test_loading_certificate(self):
         # Try to load private key and self signed certificate
-        cert = self.sign_cert(key, duration=timedelta(days=1))
-        key = pankkiyhteys.Key(private_key, cert)
-        assert isinstance(key, pankkiyhteys.Key)
-        assert key.valid()
+        cert = sign_cert(self.key_no_cert, duration=timedelta(days=1))
+        key = pankkiyhteys.key.Key(self.key_no_cert.private_key(), cert)
+        assert isinstance(key, pankkiyhteys.key.Key)
         assert timedelta(hours=23) < key.valid_duration <= timedelta(days=1)
 
+    def test_exporting_certificate(self):
         # Export certificate and try to load it
-        cert = key.certificate()
-        key = pankkiyhteys.Key(private_key, cert)
-        assert isinstance(key, pankkiyhteys.Key)
-        assert key.valid()
+        cert = self.key.certificate()
+        key = pankkiyhteys.key.Key(self.key.private_key(), cert)
+        assert isinstance(key, pankkiyhteys.key.Key)

@@ -1,5 +1,3 @@
-from .client import Client
-from .banks import Bank, Environment
-from .key import Key
+from .pankkiyhteys import Environment, Osuuspankki
 
-__all__ = [Client, Bank, Environment, Key]
+__all__ = [Environment, Osuuspankki]
