@@ -1,8 +1,5 @@
 import unittest
 
-from lxml import etree
-from datetime import datetime
-
 import pankkiyhteys.messages
 
 APP_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
