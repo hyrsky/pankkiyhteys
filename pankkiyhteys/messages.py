@@ -46,6 +46,10 @@ def _unmarshall(res, element):
 
     tag = etree.QName(element)
 
+    # Skip tags:
+    if tag.localname in ('Compressed', 'CompressionMethod'):
+        return
+
     # Skip signature
     if tag.namespace == xmlsec.constants.DSigNs:
         return
@@ -81,7 +85,7 @@ class Response:
     SUCCESSS = 0
     UNKNOWN_ERROR = 255
 
-    def __init__(self, header, response):
+    def __init__(self, response):
         """
         Construct response.
 
@@ -90,10 +94,31 @@ class Response:
             response (string): Response body
             logger (string): Response body
         """
-        self.response_text = header['ResponseText']
-        self.response_code = header['ResponseCode']
+
+        def get_val(res, default=None):
+            return next(iter(res or []), None)
 
         self.root = etree.fromstring(response)
+
+        ns = {'ns': self.root.nsmap[None]}
+
+        compress = get_val(self.root.xpath(
+            '/*/ns:Compressed/text()[1]', namespaces=ns), False)
+        self.compressed = compress is not None and compress.lower() == 'true'
+
+        self.compression_method = get_val(self.root.xpath(
+            '/*/ns:CompressionMethod/text()[1]', namespaces=ns), 'RFC1952')
+
+        # Test supported compression mehtods
+        if self.compressed and self.compression_method != 'RFC1952':
+            raise ValueError('Unknown compression method %s'.format(
+                self.compression_method))
+
+        self.response_text = get_val(self.root.xpath(
+            '/*/ns:ResponseText/text()[1]', namespaces=ns), None)
+
+        self.response_code = get_val(self.root.xpath(
+            '/*/ns:ResponseCode/text()[1]', namespaces=ns), self.UNKNOWN_ERROR)
 
     def verify(self):
         """Verify signature on the response TODO """
@@ -101,7 +126,13 @@ class Response:
 
     def deserialize(self):
         res = _unmarshall({}, self.root)
-        res['ResponseCode'] = int(res.get('ResponseCode', self.UNKNOWN_ERROR))
+        res['ResponseCode'] = int(self.response_code)
+        res['ResponseText'] = self.response_text
+
+        if self.compressed:
+            res['Content'] = gzip.decompress(base64.b64decode(res['Content']))
+        elif 'Content' in res:
+            res['Content'] = base64.b64decode(res['Content'])
 
         return res
 

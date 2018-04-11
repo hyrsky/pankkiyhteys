@@ -51,9 +51,7 @@ class CertServiceMixin(BaseMixin):
     """
 
     def __handle_response(self, response):
-        response = Response(
-            response.ResponseHeader,
-            response.ApplicationResponse)
+        response = Response(response.ApplicationResponse)
 
         self.logger.info('Response %s (%s)',
                          response.response_text, response.response_code)
@@ -136,9 +134,7 @@ class WebServiceMixin(BaseMixin):
     """
 
     def __handle_response(self, response):
-        response = Response(
-            response.ResponseHeader,
-            response.ApplicationResponse)
+        response = Response(response.ApplicationResponse)
 
         self.logger.info('Response %s (%s)',
                          response.response_text, response.response_code)
