@@ -13,6 +13,7 @@ setup(
     author_email='santeri@oikeuttaelaimille.fi',
     url='https://github.com/hyrsky/Pankkiyhteys',
     packages=['pankkiyhteys'],
+    include_package_data=True,
     install_requires=[
         'lxml',
         'zeep',
