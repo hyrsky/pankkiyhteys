@@ -22,7 +22,7 @@ class Tila(Enum):
     MUOTOVIRHE = 9
 
 
-class TL:
+class TapahtumaLuettelo:
     Row = namedtuple('Row', [
         'tilinumero', 'kirjauspv', 'maksupv',
         'arkistointitunnus', 'viite', 'nimi',
@@ -30,26 +30,24 @@ class TL:
         'oikaisutunnus', 'valitystapa', 'tila'
     ])
 
+    @classmethod
+    def parse(cls, content):
+        with StringIO(content) as buffer:
+            return cls(buffer)
+
     def _to_decimal(self, field):
         return Decimal("{}.{}".format(field[:-2], field[-2:]))
 
-    def _read_header(self, header):
-        # Check header magic
-        if header[0] != "0":
-            raise ValueError("Invalid header")
-
-        self.kirjoituspv = datetime.strptime(header[1:11], "%y%m%d%H%M")
-        self.rahalaitostunnus = header[11:13]
-        self.laskuttajan_tunnus = header[13:22]
-        self.rahayksikko = Rahayksikko(int(header[22]))
-
     def _read_footer(self, footer):
-        self.viitetap_kpl = int(footer[1:7])
-        self.viitetap_summa = self._to_decimal(footer[7:18])
-        self.viiteoik_kpl = int(footer[18:24])
-        self.viiteoik_summa = self._to_decimal(footer[24:35])
-        self.epaonnis_kpl = int(footer[35:41])
-        self.epaonnis_summa = self._to_decimal(footer[41:52])
+        self.viitetap_kpl += int(footer[1:7])
+        self.viitetap_summa += self._to_decimal(footer[7:18])
+        self.viiteoik_kpl += int(footer[18:24])
+        self.viiteoik_summa += self._to_decimal(footer[24:35])
+        self.epaonnis_kpl += int(footer[35:41])
+        self.epaonnis_summa += self._to_decimal(footer[41:52])
+
+    def _read_header(self, header):
+        self.kirjoituspv = datetime.strptime(header[1:11], "%y%m%d%H%M")
 
     def _read_row(self, line):
         self._rows.append(self.Row(
@@ -66,23 +64,27 @@ class TL:
             valitystapa=line[88:89],
             tila=Tila(int(line[89:90].strip() or 0))))
 
-    def __init__(self, content):
-        buffer = StringIO(content)
-
-        self._read_header(buffer.readline())
+    def __init__(self, buffer):
         self._rows = []
+        self.viitetap_kpl = 0
+        self.viiteoik_kpl = 0
+        self.epaonnis_kpl = 0
+        self.viitetap_summa = Decimal(0)
+        self.viiteoik_summa = Decimal(0)
+        self.epaonnis_summa = Decimal(0)
 
         for line in buffer.readlines():
             # Skip empty lines
             if not line.strip():
                 continue
-
+            # Check header magic
+            elif line[0] == "0":
+                self._read_header(line)
             # Footer magic
-            if line[0] == '9':
-                break
-
-            self._read_row(line)
-        self._read_footer(line)
+            elif line[0] == '9':
+                self._read_footer(line)
+            else:
+                self._read_row(line)
 
     def __getitem__(self, index):
         return self._rows[index]
