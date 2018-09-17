@@ -131,11 +131,10 @@ class Response:
         res['ResponseText'] = self.response_text
 
         if 'Content' in res:
-            if self.compressed:
-                res['Content'] = gzip.decompress(
-                    base64.b64decode(res['Content']))
-
             res['Content'] = base64.b64decode(res['Content'])
+
+            if self.compressed:
+                res['Content'] = gzip.decompress(res['Content'])
 
         return res
 
