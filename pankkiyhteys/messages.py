@@ -126,12 +126,15 @@ class Response:
 
     def deserialize(self):
         res = _unmarshall({}, self.root)
+
         res['ResponseCode'] = int(self.response_code)
         res['ResponseText'] = self.response_text
 
-        if self.compressed:
-            res['Content'] = gzip.decompress(base64.b64decode(res['Content']))
-        elif 'Content' in res:
+        if 'Content' in res:
+            if self.compressed:
+                res['Content'] = gzip.decompress(
+                    base64.b64decode(res['Content']))
+
             res['Content'] = base64.b64decode(res['Content'])
 
         return res
@@ -221,7 +224,7 @@ class ApplicationRequest(Request):
                  content=None):
         super().__init__('ApplicationRequest', namespace=self.NAMESPACE)
 
-        # Order matters
+        # Order matters!
         self['CustomerId'] = customer_id
         self._set_optional('Command', command)
         self['Timestamp'] = timestamp
@@ -234,18 +237,23 @@ class ApplicationRequest(Request):
         self._set_optional('UserFilename', user_filename)
         self._set_optional('TargetId', target_id)
         self._set_optional('ExecutionSerial', execution_serial)
+
         if encryption:
             raise NotImplementedError('Encryption is not implementet')
+
         if compression:
             self['Compression'] = True
             self['CompressionMethod'] = 'RFC1952'
+
         self._set_optional('AmountTotal', amount_total)
         self._set_optional('TransactionCount', transaction_count)
         self['SoftwareId'] = software_id
         self._set_optional('CustomerExtension', customer_extension)
         self._set_optional('FileType', file_type)
+
         if content is not None:
-            self['Content'] = self._encode_content(content)
+            self['Content'] = self._encode_content(content,
+                                                   compression=compression)
 
 
 class CertApplicationRequest(Request):
@@ -294,14 +302,19 @@ class CertApplicationRequest(Request):
         self['SoftwareId'] = software_id
         self._set_optional('Command', command)
         self._set_optional('ExecutionSerial', execution_serial)
+
         if encryption:
             raise NotImplementedError('Encryption is not implementet')
+
         if compression:
             self['Compression'] = True
             self['CompressionMethod'] = 'RFC1952'
+
         self['Service'] = service
+
         if content is not None:
             self['Content'] = self._encode_content(content)
+
         self._set_optional('TransferKey', transfer_key)
         self._set_optional('SerialNumber', serial_number)
 

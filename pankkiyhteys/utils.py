@@ -1,7 +1,7 @@
 import itertools
 
 
-SOFTWARE_ID = 'pankkiyhteys v0.3'
+SOFTWARE_ID = 'pankkiyhteys v0.4'
 """ str: Client software identifier sent to bank on each request"""
 
 

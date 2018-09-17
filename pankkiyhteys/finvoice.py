@@ -13,10 +13,12 @@ XSI = 'https://www.w3.org/2001/XMLSchema-instance'
 EB = 'http://www.oasisopen.org/committees/ebxml-msg/schema/msg-header-2_0.xsd'
 FINVOICE = 'http://www.finanssiala.fi/finvoice/dokumentit/Finvoice.xsd'
 
+
 class Command(Enum):
     ADD = 'ADD'
     CHANGE = 'CHANGE'
     DELETE = 'DELETE'
+
 
 class ReceiverNotice:
 

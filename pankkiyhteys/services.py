@@ -124,7 +124,6 @@ class CertServiceMixin(BaseMixin):
         """
         Get service certificates
         """
-
         return self.__make_request('getServiceCertificates')
 
 
@@ -164,8 +163,7 @@ class WebServiceMixin(BaseMixin):
             timestamp=datetime.now(timezone.utc),
             environment=self.environment.name,
             software_id=SOFTWARE_ID,
-            **kwargs
-        )
+            **kwargs)
 
         request.sign(self.key)
 
@@ -195,6 +193,19 @@ class WebServiceMixin(BaseMixin):
             file_references=[{'FileReference': file_reference}],
             compression=True)
 
+    def upload_file(self, file_type, content):
+        """Upload file
+
+        Args:
+            file_type (str): File type identifier
+            content (bytes): File content
+        """
+        return self.__make_request(
+            'uploadFile',
+            file_type=file_type,
+            content=content,
+            compression=True)
+
     def get_file_list(self, *,
                       status=None,
                       file_type=None,
@@ -212,7 +223,6 @@ class WebServiceMixin(BaseMixin):
                 present, but StartDate is given, it means the filtering
                 criteria does not have an ending point.
         """
-
         return self.__make_request(
             'downloadFileList',
             start_date=start_date,
