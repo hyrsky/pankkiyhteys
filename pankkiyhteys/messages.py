@@ -130,7 +130,7 @@ class Response:
         res['ResponseCode'] = int(self.response_code)
         res['ResponseText'] = self.response_text
 
-        if 'Content' in res:
+        if 'Content' in res and res['Content']:
             res['Content'] = base64.b64decode(res['Content'])
 
             if self.compressed:
