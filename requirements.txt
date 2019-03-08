@@ -1,5 +1,0 @@
-lxml
-zeep
-cryptography
-xmlsec
-pyopenssl
