@@ -5,6 +5,7 @@
 import * as builder from 'xmlbuilder'
 import * as parser from 'fast-xml-parser'
 import * as xpath from 'xpath'
+import { gunzip } from 'zlib'
 import { v4 as uuid } from 'uuid'
 import { DOMParser } from 'xmldom'
 import { namespaces, isElementSigned, X509ToCertificate } from './xml'
@@ -38,7 +39,7 @@ export interface ApplicationRequest {
   /** Specifies which environment the request is meant for. */
   Environment: 'TEST' | 'PRODUCTION'
   /** Unique identification of the file that is the target of the operation. */
-  FileReference?: string
+  FileReferences?: { FileReference: string }
   /** A name given to the file by the customer. */
   UserFileName?: string
   /** The logical folder name where the file(s) of the customer are stored in the bank. A user can have access to several folders. */
@@ -141,8 +142,6 @@ export class Client extends SoapClient {
    * Get list of files
    */
   async getFileList(options: GetFileListOptions = {}): Promise<any> {
-    debug('getFileList')
-
     const response = await this.makeRequest('downloadFileListin', {
       '@xmlns': 'http://bxd.fi/xmldata/',
       CustomerId: this.username,
@@ -159,6 +158,48 @@ export class Client extends SoapClient {
   }
 
   /**
+   * Download file
+   *
+   * The client must have obtained the fileReference value beforehand, e.g.
+   * using the getFileList or uploadFile operations.
+   *
+   * @param fileReference Unique identification of the file.
+   */
+  async getFile(fileReference: string) {
+    const response = await this.makeRequest('downloadFilein', {
+      '@xmlns': 'http://bxd.fi/xmldata/',
+      CustomerId: this.username,
+      Timestamp: this.formatTime(new Date()),
+      Environment: this.environment,
+      FileReferences: { FileReference: fileReference },
+      Compression: 'true',
+      CompressionMethod: 'RFC1952',
+      SoftwareId: VERSION_STRING
+    })
+
+    const { Compression, CompressionMethod, Content } = response.ApplicationResponse
+
+    // Retrun content if data is not compressed.
+    if (!Compression) {
+      return Buffer.from(Content, 'base64').toString()
+    }
+
+    if (CompressionMethod !== 'RFC1952') {
+      throw new Error(`Unsupported compression method ${CompressionMethod}`)
+    }
+
+    // Return uncompressed buffer.
+    return new Promise((resolve, reject) =>
+      gunzip(Buffer.from(Content, 'base64'), (err, result) => {
+        if (err) {
+          reject(err)
+        }
+        resolve(result.toString())
+      })
+    )
+  }
+
+  /**
    * Make request to corporate file service.
    *
    * @param service Request type
@@ -171,6 +212,8 @@ export class Client extends SoapClient {
     applicationRequest: ApplicationRequest,
     timestamp = new Date()
   ) {
+    debug('Request %s', service)
+
     // Convert application request xml.
     const xml = this.signApplicationRequest(
       builder
@@ -203,6 +246,13 @@ export class Client extends SoapClient {
     )
 
     const header = parseResponseHeader(response)
+
+    debug('Response %s = %s', service, header.ResponseText)
+    if (parseInt(header.ResponseCode, 10) !== 0) {
+      debug('%o', header)
+
+      throw new Error(`Error: ${header.ResponseCode}: ${header.ResponseText}`)
+    }
 
     // Use preprocess callback that adds certificates to trust store.
     // Otherwise we might not have intermediary certificates before signature validation.

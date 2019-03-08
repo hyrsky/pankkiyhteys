@@ -4,6 +4,7 @@
 
 import * as application from '../src/application'
 import TrustStore from '../src/trust'
+import { gzipSync } from 'zlib'
 
 import * as xpath from 'xpath'
 import * as fs from 'fs'
@@ -108,5 +109,41 @@ describe('Test xml module', () => {
 
     // Should throw
     await expect(result).rejects.toBeTruthy()
+  })
+
+  it('Test getFile compression support', async () => {
+    const key: any = {}
+    const certService: application.CertService = {
+      getRootCA: jest.fn().mockReturnValue([]),
+      addIntermediaryCertificates: jest.fn()
+    }
+
+    const client = new application.Client(
+      'test-username',
+      key,
+      'EN',
+      'BANK123',
+      'example.com',
+      certService
+    )
+
+    const header: application.ResponseHeader = {
+      SenderId: 'sender-id',
+      RequestId: 'request-id',
+      Timestamp: new Date().toISOString(),
+      ResponseCode: '00',
+      ResponseText: 'OK.'
+    }
+
+    client.makeRequest = jest.fn().mockReturnValueOnce({
+      Header: header,
+      ApplicationResponse: {
+        Compression: true,
+        CompressionMethod: 'RFC1952',
+        Content: gzipSync(Buffer.from('Hello world')).toString('base64')
+      }
+    })
+
+    await expect(client.getFile('test-file-reference')).resolves.toEqual('Hello world')
   })
 })
