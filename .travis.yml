@@ -3,21 +3,31 @@ node_js: '8'
 cache: npm
 notifications:
   email: false
-script:
-  - npm run test:prod && npm run build
 jobs:
   include:
-    - stage: deploy docs
-      node_js: '8'
-      script: npm run build
-      deploy:
-        local-dir: docs
-        provider: pages
-        skip-cleanup: true
-        github-token: $GITHUB_TOKEN
-        keep-history: true
-        on:
-          branch: master
-branches:
-  except:
-    - /^v\d+\.\d+\.\d+$/
+  - stage: test
+    script:
+    - npm run test:prod
+  - stage: deploy
+    name: 'deploy docs'
+    script: npm run build
+    deploy:
+      provider: pages
+      local-dir: docs
+      skip-cleanup: true
+      github-token: "$GITHUB_TOKEN"
+      keep-history: true
+      on:
+        tags: true
+        branch: master
+        repo: hyrsky/pankkiyhteys
+  - script: npm run build
+    name: 'deploy npm package'
+    deploy:
+      provider: npm
+      skip_cleanup: true
+      email: santeri@oikeuttaelaimille.fi
+      api_key: "$NPM_TOKEN"
+      on:
+        tags: true
+        repo: hyrsky/pankkiyhteys
