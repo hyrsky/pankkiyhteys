@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ApplicationRequest xmlns="http://bxd.fi/xmldata/">
+<CustomerId>1000061998</CustomerId>
+<Timestamp>2019-02-28T00:05:42+00:00</Timestamp>
+<EndDate>2019-02-28</EndDate>
+<Status>NEW</Status>
+<Environment>PRODUCTION</Environment>
+<SoftwareId>pankkiyhteys v0.4</SoftwareId>
+
+</ApplicationRequest>

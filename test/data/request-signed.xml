@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ApplicationRequest xmlns="http://bxd.fi/xmldata/">
+<CustomerId>1000061998</CustomerId>
+<Timestamp>2019-02-28T00:05:42+00:00</Timestamp>
+<EndDate>2019-02-28</EndDate>
+<Status>NEW</Status>
+<Environment>PRODUCTION</Environment>
+<SoftwareId>pankkiyhteys v0.4</SoftwareId>
+<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
+<SignedInfo>
+<CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>
+<SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/>
+<Reference URI="">
+<Transforms>
+<Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+</Transforms>
+<DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>
+<DigestValue>7qBb+2dONa5AbfIYi12E+X3KAYQ=</DigestValue>
+</Reference>
+</SignedInfo>
+<SignatureValue>sHwDo5C3lWoWcWIr0CT12FadybJ9+xMK33elxeJgpk9MbPyC32abU0jqM44IieI9
+kmpDjVOnD4SHm/vlRkWcJB8aLY4X7nWwm+CeuGSq5Ra//HX5oM8j//D72ggtJhhH
+dilYZ3nY9l+5uuIBXGUZJvEYyxqOshKx1iisbNT4avEGq4dpBLowi7DlgKSnWN1p
+F/yuDv3vr2ZKZqhpY16bsBdUi8oed4QGrTLgRQdwRwbvofaTcEMrHXao3fr7O1Zu
+1WcTuUPyLYwh+qYAt9Bp/Ze4XFNO6PeAxceMhIRG61GPML2SFh1kA3Mx40ETWo7v
+YdNMy0ezpHfXW8gUXhJRRA==</SignatureValue>
+<KeyInfo>
+</KeyInfo>
+</Signature>
+</ApplicationRequest>
