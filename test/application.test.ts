@@ -112,7 +112,6 @@ describe('Test xml module', () => {
   })
 
   it('Test getFile compression support', async () => {
-    const key: any = {}
     const certService: application.CertService = {
       getRootCA: jest.fn().mockReturnValue([]),
       addIntermediaryCertificates: jest.fn()
@@ -120,7 +119,7 @@ describe('Test xml module', () => {
 
     const client = new application.Client(
       'test-username',
-      key,
+      {} as any,
       'EN',
       'BANK123',
       'example.com',
@@ -130,20 +129,34 @@ describe('Test xml module', () => {
     const header: application.ResponseHeader = {
       SenderId: 'sender-id',
       RequestId: 'request-id',
-      Timestamp: new Date().toISOString(),
+      Timestamp: '2020-10-10T00:00:00Z',
       ResponseCode: '00',
       ResponseText: 'OK.'
     }
 
-    client.makeRequest = jest.fn().mockReturnValueOnce({
-      Header: header,
-      ApplicationResponse: {
-        Compression: true,
-        CompressionMethod: 'RFC1952',
-        Content: gzipSync(Buffer.from('Hello world')).toString('base64')
-      }
-    })
+    const message = 'Hello, world!'
 
-    await expect(client.getFile('test-file-reference')).resolves.toEqual('Hello world')
+    client.makeRequest = jest
+      .fn()
+      .mockReturnValueOnce({
+        Header: header,
+        ApplicationResponse: {
+          Compressed: true,
+          CompressionMethod: 'RFC1952',
+          Content: gzipSync(Buffer.from(message)).toString('base64')
+        }
+      })
+      .mockReturnValueOnce({
+        Header: header,
+        ApplicationResponse: {
+          Content: Buffer.from(message).toString('base64')
+        }
+      })
+
+    const test1 = await client.getFile('test-file-reference')
+    const test2 = await client.getFile('test-file-reference')
+
+    expect(test1.toString()).toEqual(message)
+    expect(test2.toString()).toEqual(message)
   })
 })

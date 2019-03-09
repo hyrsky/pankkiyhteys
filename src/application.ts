@@ -165,7 +165,7 @@ export class Client extends SoapClient {
    *
    * @param fileReference Unique identification of the file.
    */
-  async getFile(fileReference: string) {
+  async getFile(fileReference: string): Promise<Buffer> {
     const response = await this.makeRequest('downloadFilein', {
       '@xmlns': 'http://bxd.fi/xmldata/',
       CustomerId: this.username,
@@ -177,26 +177,21 @@ export class Client extends SoapClient {
       SoftwareId: VERSION_STRING
     })
 
-    const { Compression, CompressionMethod, Content } = response.ApplicationResponse
+    const { Compressed, CompressionMethod, Content } = response.ApplicationResponse
+
+    // Return decompressed buffer.
+    if (Compressed) {
+      if (CompressionMethod !== 'RFC1952') {
+        throw new Error(`Unsupported compression method ${CompressionMethod}`)
+      }
+
+      return new Promise<Buffer>((resolve, reject) =>
+        gunzip(Buffer.from(Content, 'base64'), (err, res) => (err ? reject(err) : resolve(res)))
+      )
+    }
 
     // Retrun content if data is not compressed.
-    if (!Compression) {
-      return Buffer.from(Content, 'base64').toString()
-    }
-
-    if (CompressionMethod !== 'RFC1952') {
-      throw new Error(`Unsupported compression method ${CompressionMethod}`)
-    }
-
-    // Return uncompressed buffer.
-    return new Promise((resolve, reject) =>
-      gunzip(Buffer.from(Content, 'base64'), (err, result) => {
-        if (err) {
-          reject(err)
-        }
-        resolve(result.toString())
-      })
-    )
+    return Buffer.from(Content, 'base64')
   }
 
   /**
