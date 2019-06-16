@@ -266,7 +266,7 @@ export class Client extends SoapClient {
    *
    * @param xml
    */
-  private signApplicationRequest(xml: string) {
+  protected signApplicationRequest(xml: string) {
     return sign(xml, this.key, [], {
       canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
     })
@@ -275,7 +275,7 @@ export class Client extends SoapClient {
   /**
    * Verify request signature in application request parsing callback
    */
-  private verifyRequestCallback: ParsePreprocess = async (xml, document) => {
+  protected verifyRequestCallback: ParsePreprocess = async (xml, document) => {
     await verifyApplicationRequestSignature(xml, document, this.trustStore)
   }
 }

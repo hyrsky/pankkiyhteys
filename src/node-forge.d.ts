@@ -281,6 +281,8 @@ declare module 'node-forge' {
 
     function certificationRequestToPem(cert: Certificate, maxline?: number): PEM
 
+    function certificationRequestToAsn1(cert: Certificate): any
+
     function certificationRequestFromPem(
       pem: PEM,
       computeHash?: boolean,

@@ -1,5 +1,5 @@
 /**
- * @file Main entrypoint for library
+ * @file Main entrypoint
  */
 
 import * as builder from 'xmlbuilder'
@@ -8,12 +8,13 @@ import { v4 as uuid } from 'uuid'
 import createDebug from 'debug'
 
 import SoapClient from './soap'
-import TrustStore, { sign, Key } from './trust'
+import TrustStore, { generateSigningRequest, sign, Key } from './trust'
 import { X509ToCertificate } from './xml'
 import * as app from './application'
 
-// Certificates
+// Certificate authority
 import { OPPohjola, OPPohjolaTest } from './cacerts/OP-Pohjola'
+import { pki } from 'node-forge'
 
 const debug = createDebug('pankkiyhteys')
 
@@ -45,6 +46,10 @@ interface CertApplicationRequest {
   SoftwareId: string
   /** Service indentifier */
   Service: string
+  /** pkcs#10 request */
+  Content?: string
+  /** Shared secret */
+  TransferKey?: string
 }
 
 export { Key } from './trust'
@@ -60,7 +65,7 @@ export class OsuuspankkiCertService extends SoapClient implements app.CertServic
     this.environment = environment
   }
 
-  private static getEndpoint(environment: app.Environment) {
+  static getEndpoint(environment: app.Environment) {
     return {
       [app.Environment.PRODUCTION]: 'https://wsk.op.fi/services/OPCertificateService',
       [app.Environment.TEST]: 'https://wsk.asiakastesti.op.fi/services/OPCertificateService'
@@ -109,8 +114,6 @@ export class OsuuspankkiCertService extends SoapClient implements app.CertServic
         }
       }
     )
-
-    const header = app.parseResponseHeader(response)
 
     // Use preprocess callback that adds certificates to trust store.
     // Otherwise we might not have intermediary certificates before signature validation.
@@ -165,5 +168,75 @@ export class Osuuspankki extends app.Client {
       [app.Environment.PRODUCTION]: 'https://wsk.op.fi/services/CorporateFileService',
       [app.Environment.TEST]: 'https://wsk.asiakastesti.op.fi/services/CorporateFileService'
     }[environment]
+  }
+
+  /**
+   * Get new certificate from cert service.
+   *
+   * Private must have following conditions:
+   *   * Modulus lenth = 2048
+   *   * If key already has signed certificate the current certificate will be returned instead.
+   *
+   * Client must save the private key to persistent storage before calling this method.
+   *
+   * @todo: replace currently used key
+   *
+   * @param newPrivateKey RSA private key (pem)
+   */
+  async getCertificate(privateKey: string, transferKey: string) {
+    debug('renewCertificate')
+
+    const csr = generateSigningRequest(privateKey, this.username, 'FI')
+
+    const request: CertApplicationRequest = {
+      '@xmlns': 'http://op.fi/mlp/xmldata/',
+      CustomerId: this.username,
+      Timestamp: this.formatTime(new Date()),
+      Environment: this.environment,
+      SoftwareId: app.VERSION_STRING,
+      Service: 'MATU',
+      Content: csr
+    }
+
+    // Convert application request xml.
+    const requestXml = this.signApplicationRequest(
+      builder
+        .create({ CertApplicationRequest: request }, { version: '1.0', encoding: 'UTF-8' })
+        .end()
+    )
+
+    // Request id cannot be longer that 35 characters.
+    const requestId = uuid().substr(0, 35)
+
+    // Cert service envelopes are not signed.
+    const response = await this.makeSoapRequest(
+      OsuuspankkiCertService.getEndpoint(this.environment),
+      {
+        getCertificatein: {
+          '@xmlns': 'http://mlp.op.fi/OPCertificateService',
+          RequestHeader: {
+            SenderId: this.username,
+            RequestId: requestId,
+            Timestamp: this.formatTime(new Date())
+          },
+          ApplicationRequest: Buffer.from(requestXml).toString('base64')
+        }
+      }
+    )
+
+    const applicationResponse = await app.parseApplicationResponse(
+      response,
+      this.verifyRequestCallback
+    )
+
+    const {
+      CertApplicationResponse: {
+        Certificates: {
+          Certificate: { Name, Certificate, CertificateFormat }
+        }
+      }
+    } = applicationResponse
+
+    return pki.certificateToPem(X509ToCertificate(Certificate))
   }
 }

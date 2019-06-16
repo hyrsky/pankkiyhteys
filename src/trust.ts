@@ -1,5 +1,6 @@
 import * as os from 'os'
 import * as path from 'path'
+import { generateKeyPair } from 'crypto'
 import * as xpath from 'xpath'
 import createDebug from 'debug'
 
@@ -27,6 +28,53 @@ export class Key {
   constructor(key: string, cert: string) {
     this.privateKey = key
     this.certificate = pki.certificateFromPem(cert)
+
+    const dateToCheck = new Date()
+    dateToCheck.setMonth(dateToCheck.getMonth() + 1)
+    if (this.expires() < dateToCheck) {
+      debug('warning: certificate is about to expire')
+    }
+  }
+
+  /**
+   * Generate new key.
+   *
+   * @param commonName WS username.
+   * @param country Two letter country code.
+   */
+  static async generateKey(commonName: string, country: string) {
+    debug('Generating 2048-bit key-pair...')
+    return new Promise<{ publicKey: string; privateKey: string }>((resolve, reject) =>
+      // node-forge also offers key generation function but frankly I trust nodejs crypto more.
+      generateKeyPair(
+        // @ts-ignore
+        'rsa',
+        {
+          modulusLength: 2048,
+          publicKeyEncoding: {
+            type: 'spki',
+            format: 'pem'
+          },
+          privateKeyEncoding: {
+            type: 'pkcs8',
+            format: 'pem'
+          }
+        },
+        (err: Error | null, pemPublicKey: string, pemPrivateKey: string) => {
+          if (err) {
+            return reject(err)
+          }
+          resolve({
+            publicKey: pemPublicKey,
+            privateKey: pemPrivateKey
+          })
+        }
+      )
+    )
+  }
+
+  expires(): Date {
+    return this.certificate.validity.notAfter
   }
 
   getBase64Certificate() {
@@ -46,6 +94,46 @@ interface SignExtraOptions {
 }
 
 type SignOptions = ComputeSignatureOptions & SignExtraOptions
+
+/**
+ * Convert certificate signing request to base64 encoded der
+ *
+ * @param csr
+ */
+function encodeSigningRequest(csr: pki.Certificate) {
+  return util.encode64(asn1.toDer(pki.certificationRequestToAsn1(csr)).getBytes())
+}
+
+/**
+ * Create certificate signing request from pem encoded private key.
+ *
+ * @return base der formatted csr.
+ */
+export function generateSigningRequest(
+  privateKeyPem: string,
+  commonName: string,
+  countryName: string
+) {
+  const privateKey = pki.privateKeyFromPem(privateKeyPem)
+  const publicKey = pki.rsa.setPublicKey((privateKey as any).n, (privateKey as any).e)
+
+  const csr = pki.createCertificationRequest()
+  csr.publicKey = publicKey
+  csr.setSubject([
+    {
+      name: 'commonName',
+      value: commonName
+    },
+    {
+      name: 'countryName',
+      value: countryName
+    }
+  ])
+  csr.sign(privateKey)
+
+  debug('Certification request (CSR) created.')
+  return encodeSigningRequest(csr)
+}
 
 /**
  * Sign xml document
@@ -183,8 +271,6 @@ export default class TrustStore {
 
   /**
    * Test if given certificate is trusted.
-   *
-   * @todo: Support certificate chains.
    *
    * @param certificate Certificate to test.
    * @param noLoading Don't attempt to load new intermediary certificates.
