@@ -2,6 +2,7 @@ import * as request from 'request-promise-native'
 import * as builder from 'xmlbuilder'
 import * as xpath from 'xpath'
 import createDebug from 'debug'
+import { v4 as uuid } from 'uuid'
 import { DOMParser } from 'xmldom'
 
 import TrustStore, { Key, verifySignature, sign } from './trust'
@@ -28,6 +29,13 @@ export default class SoapClient {
   addMinutes(date: Date, time: number) {
     date.setMinutes(date.getMinutes() + time)
     return date
+  }
+
+  /**
+   * Generate 35 character long random request id.
+   */
+  requestId() {
+    return uuid().substr(0, 35)
   }
 
   /**

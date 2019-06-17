@@ -1,10 +1,11 @@
-import * as os from 'os'
-import * as path from 'path'
+import { tmpdir } from 'os'
 import { generateKeyPair } from 'crypto'
+import { promisify } from 'util'
+import * as path from 'path'
 import * as xpath from 'xpath'
 import createDebug from 'debug'
 
-import * as file from './file'
+import file from './file'
 import { SignedXml, ComputeSignatureOptions } from 'xml-crypto'
 import { pki, md, asn1, util } from 'node-forge'
 
@@ -21,6 +22,12 @@ type LoadCertificatesCallback = (trustStore: TrustStore) => Promise<void>
 /** Directory name for intermediary cache directory. */
 const TMP_DIRNAME = 'pankkiyhteys'
 
+/**
+ * Key object contains RSA private and public key pair.
+ *
+ * This class also offers convinience methods for converting between file
+ * formats. (wrappers for node-forge and nodejs crypto modules)
+ */
 export class Key {
   privateKey: string
   certificate: pki.Certificate
@@ -29,60 +36,69 @@ export class Key {
     this.privateKey = key
     this.certificate = pki.certificateFromPem(cert)
 
-    const dateToCheck = new Date()
-    dateToCheck.setMonth(dateToCheck.getMonth() + 1)
-    if (this.expires() < dateToCheck) {
+    if (this.isAboutToExpire()) {
       debug('warning: certificate is about to expire')
     }
   }
 
   /**
-   * Generate new key.
-   *
-   * @param commonName WS username.
-   * @param country Two letter country code.
+   * Return true if certificate is about to expire (less than a month remaining).
    */
-  static async generateKey(commonName: string, country: string) {
-    debug('Generating 2048-bit key-pair...')
-    return new Promise<{ publicKey: string; privateKey: string }>((resolve, reject) =>
-      // node-forge also offers key generation function but frankly I trust nodejs crypto more.
-      generateKeyPair(
-        // @ts-ignore
-        'rsa',
-        {
-          modulusLength: 2048,
-          publicKeyEncoding: {
-            type: 'spki',
-            format: 'pem'
-          },
-          privateKeyEncoding: {
-            type: 'pkcs8',
-            format: 'pem'
-          }
-        },
-        (err: Error | null, pemPublicKey: string, pemPrivateKey: string) => {
-          if (err) {
-            return reject(err)
-          }
-          resolve({
-            publicKey: pemPublicKey,
-            privateKey: pemPrivateKey
-          })
-        }
-      )
-    )
+  isAboutToExpire() {
+    const dateToCheck = new Date()
+    dateToCheck.setMonth(dateToCheck.getMonth() + 1)
+    return this.expires() < dateToCheck
   }
 
+  /**
+   * Return certificate expiration date
+   */
   expires(): Date {
     return this.certificate.validity.notAfter
+  }
+
+  /**
+   * Get PEM encoded certificate
+   */
+  getCertificate() {
+    return pki.certificateToPem(this.certificate)
+  }
+
+  /**
+   * Get PEM encoded private key
+   */
+  getPrivateKey() {
+    return this.privateKey
   }
 
   getBase64Certificate() {
     return util.encode64(asn1.toDer(pki.certificateToAsn1(this.certificate)).getBytes())
   }
 
-  getPemCertificate() {
-    return pki.certificateToPem(this.certificate)
+  /**
+   * Generate new rsa private key.
+   */
+  static async generateKey() {
+    const modulusLength = 2048
+    debug(`Generating ${modulusLength}-bit key-pair...`)
+
+    const { publicKey, privateKey } = await promisify(generateKeyPair)(
+      // @ts-ignore
+      'rsa',
+      {
+        modulusLength,
+        publicKeyEncoding: {
+          type: 'spki',
+          format: 'pem'
+        },
+        privateKeyEncoding: {
+          type: 'pkcs8',
+          format: 'pem'
+        }
+      }
+    )
+
+    return privateKey
   }
 }
 
@@ -238,7 +254,7 @@ export function verifySignature(xml: string, signature: XMLElement, key: pki.Cer
 }
 
 export default class TrustStore {
-  protected readonly tmpDir = path.join(os.tmpdir(), TMP_DIRNAME)
+  protected readonly tmpDir = path.join(tmpdir(), TMP_DIRNAME)
   protected loadCertificates: LoadCertificatesCallback
   protected caStore: pki.CAStore
 
@@ -373,13 +389,20 @@ export default class TrustStore {
    * Load certificates cached to disk.
    */
   private async loadCachedCertificates() {
-    await file.createDirectory(this.tmpDir)
+    try {
+      await file.mkdir(this.tmpDir)
+    } catch (err) {
+      // Ignore error if directory exists.
+      if (err.code !== 'EEXIST') {
+        throw err
+      }
+    }
 
-    const files = await file.readDirectory(this.tmpDir)
+    const files = await file.readdir(this.tmpDir)
     const certs = await Promise.all(
       files.map(filename =>
         file
-          .readFile(path.join(this.tmpDir, filename))
+          .readFile(path.join(this.tmpDir, filename), 'utf8')
           .then(data => pki.certificateFromPem(data))
           .catch(err => debug(`Error loading ${filename} ${err}`))
       )

@@ -5,8 +5,8 @@
 import * as builder from 'xmlbuilder'
 import * as parser from 'fast-xml-parser'
 import * as xpath from 'xpath'
-import { gunzip } from 'zlib'
-import { v4 as uuid } from 'uuid'
+import * as zlib from 'zlib'
+import { promisify } from 'util'
 import { DOMParser } from 'xmldom'
 import { namespaces, isElementSigned, X509ToCertificate } from './xml'
 import createDebug from 'debug'
@@ -14,8 +14,9 @@ import TrustStore, { Key, sign, verifySignature } from './trust'
 import SoapClient from './soap'
 
 const debug = createDebug('pankkiyhteys')
+const gunzip = promisify(zlib.gunzip)
 
-export const VERSION_STRING = 'pankkiyhteys v0.9'
+export const VERSION_STRING = 'pankkiyhteys v0.10'
 
 type XMLDocument = any
 type XMLElement = ReturnType<xpath.XPathSelect>
@@ -185,9 +186,7 @@ export class Client extends SoapClient {
         throw new Error(`Unsupported compression method ${CompressionMethod}`)
       }
 
-      return new Promise<Buffer>((resolve, reject) =>
-        gunzip(Buffer.from(Content, 'base64'), (err, res) => (err ? reject(err) : resolve(res)))
-      )
+      return gunzip(Buffer.from(Content, 'base64')) as Promise<Buffer>
     }
 
     // Retrun content if data is not compressed.
@@ -216,9 +215,6 @@ export class Client extends SoapClient {
         .end()
     )
 
-    // Request id cannot be longer that 35 characters.
-    const requestId = uuid().substr(0, 35)
-
     const response = await this.makeSoapRequest(
       this.endpoint,
       {
@@ -227,7 +223,7 @@ export class Client extends SoapClient {
           '@xmlns:cfs': 'http://bxd.fi/CorporateFileService',
           RequestHeader: {
             SenderId: this.username,
-            RequestId: requestId,
+            RequestId: this.requestId(),
             Timestamp: this.formatTime(timestamp),
             Language: this.language,
             UserAgent: VERSION_STRING,
@@ -275,7 +271,7 @@ export class Client extends SoapClient {
   /**
    * Verify request signature in application request parsing callback
    */
-  protected verifyRequestCallback: ParsePreprocess = async (xml, document) => {
+  public verifyRequestCallback: ParsePreprocess = async (xml, document) => {
     await verifyApplicationRequestSignature(xml, document, this.trustStore)
   }
 }

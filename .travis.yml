@@ -10,7 +10,9 @@ jobs:
     - npm run test:prod
   - stage: deploy
     name: 'deploy docs'
-    script: npm run build
+    script:
+      - npm run build
+      - npm run semantic-release
     deploy:
       provider: pages
       local-dir: docs
@@ -20,14 +22,4 @@ jobs:
       on:
         tags: true
         branch: master
-        repo: hyrsky/pankkiyhteys
-  - script: npm run build
-    name: 'deploy npm package'
-    deploy:
-      provider: npm
-      skip_cleanup: true
-      email: santeri@oikeuttaelaimille.fi
-      api_key: "$NPM_TOKEN"
-      on:
-        tags: true
         repo: hyrsky/pankkiyhteys
