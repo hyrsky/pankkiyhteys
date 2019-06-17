@@ -5,16 +5,16 @@
 import * as application from '../src/application'
 import TrustStore from '../src/trust'
 import { gzipSync } from 'zlib'
+import { readFileSync } from 'fs'
 
 import * as xpath from 'xpath'
-import * as fs from 'fs'
 import * as path from 'path'
 
 import { namespaces } from '../src/xml'
 import { DOMParser } from 'xmldom'
 
 function read(file: string) {
-  return fs.readFileSync(path.join(__dirname, file), 'utf8')
+  return readFileSync(path.join(__dirname, file), 'utf8')
 }
 
 describe('Test xml module', () => {

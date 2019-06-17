@@ -4,7 +4,6 @@
 
 import * as builder from 'xmlbuilder'
 import * as xpath from 'xpath'
-import { v4 as uuid } from 'uuid'
 import createDebug from 'debug'
 
 import SoapClient from './soap'
@@ -96,9 +95,6 @@ export class OsuuspankkiCertService extends SoapClient implements app.CertServic
       .create({ CertApplicationRequest: request })
       .end({ pretty: true, indent: '  ' })
 
-    // Request id cannot be longer that 35 characters.
-    const requestId = uuid().substr(0, 35)
-
     // Cert service envelopes are not signed.
     const response = await this.makeSoapRequest(
       OsuuspankkiCertService.getEndpoint(this.environment),
@@ -107,7 +103,7 @@ export class OsuuspankkiCertService extends SoapClient implements app.CertServic
           '@xmlns': 'http://mlp.op.fi/OPCertificateService',
           RequestHeader: {
             SenderId: this.username,
-            RequestId: requestId,
+            RequestId: this.requestId(),
             Timestamp: this.formatTime(new Date())
           },
           ApplicationRequest: Buffer.from(requestXml).toString('base64')
@@ -181,9 +177,9 @@ export class Osuuspankki extends app.Client {
    *
    * @todo: replace currently used key
    *
-   * @param newPrivateKey RSA private key (pem)
+   * @param privateKey RSA private key (pem)
    */
-  async getCertificate(privateKey: string, transferKey: string) {
+  async getCertificate(privateKey: string) {
     debug('renewCertificate')
 
     const csr = generateSigningRequest(privateKey, this.username, 'FI')
@@ -205,9 +201,6 @@ export class Osuuspankki extends app.Client {
         .end()
     )
 
-    // Request id cannot be longer that 35 characters.
-    const requestId = uuid().substr(0, 35)
-
     // Cert service envelopes are not signed.
     const response = await this.makeSoapRequest(
       OsuuspankkiCertService.getEndpoint(this.environment),
@@ -216,7 +209,7 @@ export class Osuuspankki extends app.Client {
           '@xmlns': 'http://mlp.op.fi/OPCertificateService',
           RequestHeader: {
             SenderId: this.username,
-            RequestId: requestId,
+            RequestId: this.requestId(),
             Timestamp: this.formatTime(new Date())
           },
           ApplicationRequest: Buffer.from(requestXml).toString('base64')
@@ -237,6 +230,11 @@ export class Osuuspankki extends app.Client {
       }
     } = applicationResponse
 
-    return pki.certificateToPem(X509ToCertificate(Certificate))
+    const newCert = pki.certificateToPem(X509ToCertificate(Certificate))
+
+    // Start using the new key
+    this.key = new Key(privateKey, newCert)
+
+    return newCert
   }
 }

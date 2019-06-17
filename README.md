@@ -32,7 +32,7 @@ function isAboutToExpire(key) {
 const key = new Key(oldPrivateKey, oldCert)
 const client = new Osuuspankki('1234567890', key, 'FI')
 
-if (isAboutToExpire(key)) {
+if (key.isAboutToExpire()) {
   /**
    * You have to:
    *   * generate new key.

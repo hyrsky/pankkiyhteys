@@ -1,244 +1,153 @@
-import TrustStore, { verifySignature, sign, Key } from '../src/trust'
+import TrustStore, { Key } from '../src/trust'
+import { readFile, createCertificate, forgeToKey } from './utils'
 
-import * as file from '../src/file'
-import * as fs from 'fs'
+import file from '../src/file'
 import * as path from 'path'
-import * as xpath from 'xpath'
 
-import { DOMParser } from 'xmldom'
 import { pki } from 'node-forge'
-import { namespaces, getSoapSignature } from '../src/xml'
-
-function read(file: string) {
-  return fs.readFileSync(path.join(__dirname, file), 'utf8')
-}
 
 // Mock file module
 jest.mock('../src/file')
-
 const mockedFile = file as jest.Mocked<typeof file>
 
-/** Create certificate signed with another key */
-function createCertificate(
-  name: string,
-  signee?: { privateKey: pki.rsa.PrivateKey; certificate: pki.Certificate },
-  errors: { expired?: boolean; notSigned?: boolean } = {}
-) {
-  const keys = pki.rsa.generateKeyPair(1024)
-  const cert = pki.createCertificate()
+let config = {} as { [key: string]: any }
 
-  cert.publicKey = keys.publicKey
-  cert.serialNumber = '01'
-  cert.validity.notBefore = new Date()
-  cert.validity.notAfter = new Date()
-  cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1)
-
-  // Generate expired certificate
-  if (errors.expired) {
-    cert.validity.notBefore.setFullYear(cert.validity.notBefore.getFullYear() - 5)
-    cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 4)
-  }
-
-  const attrsIssuer = [
-    {
-      name: 'commonName',
-      value: 'example.com'
-    },
-    {
-      name: 'organizationName',
-      value: name
-    }
-  ]
-
-  cert.setSubject(attrsIssuer)
-
-  if (!signee) {
-    // self-sign certificate
-    cert.setIssuer(attrsIssuer)
-
-    if (!errors.notSigned) {
-      cert.sign(keys.privateKey)
-    }
-  } else {
-    cert.setIssuer(signee.certificate.subject.attributes)
-
-    if (!errors.notSigned) {
-      cert.sign(signee.privateKey)
-    }
-  }
-
-  return {
-    privateKey: keys.privateKey,
-    certificate: cert
-  }
-}
-
-describe('Test trust module', () => {
-  const privateKey = read('./data/key.pem')
-  const certificate = read('./data/certificate.pem')
-  const key = new Key(privateKey, certificate)
+/**
+ * Generate some test data beforehand
+ *
+ */
+beforeAll(async done => {
+  const [privateKey, certificate] = await Promise.all([
+    await readFile('data/key.pem'),
+    await readFile('data/certificate.pem')
+  ])
 
   // Certificate chain
-  const ca = createCertificate('CA')
-  const intermediary = createCertificate('Intermediary', ca)
-  const application = createCertificate('Application', intermediary)
+  const ca = await createCertificate('CA')
+  const intermediary = await createCertificate('Intermediary', ca)
+  const application = await createCertificate('Application', intermediary, { expiring: true })
 
-  beforeEach(() => {
-    mockedFile.readDirectory.mockClear()
-    mockedFile.readFile.mockClear()
-  })
+  config = {
+    privateKey,
+    certificate,
+    key: new Key(privateKey, certificate),
+    ca,
+    intermediary,
+    application
+  }
 
-  it('Test verify xml signature', () => {
-    const signedSoap = read('./data/soap-signed.xml')
-    const document = new DOMParser().parseFromString(signedSoap)
-    const signature = getSoapSignature(document)
+  done()
+})
 
-    expect(verifySignature(signedSoap, signature, key.certificate)).toEqual(true)
-  })
+beforeEach(() => {
+  mockedFile.readdir.mockClear()
+  mockedFile.readFile.mockClear()
+})
 
-  it('Test sign xml', () => {
-    const signedXml = sign(read('./data/request.xml'), key, [])
-    const document = new DOMParser().parseFromString(signedXml)
+test('Test detect expiring certificates', async () => {
+  const notExpiring = forgeToKey(config.ca)
+  const expiring = forgeToKey(config.application)
 
-    const select = xpath.useNamespaces({
-      dsig: namespaces.dsig
-    })
+  expect(notExpiring.isAboutToExpire()).toEqual(false)
+  expect(expiring.isAboutToExpire()).toEqual(true)
+})
 
-    const digest = select(
-      '//dsig:SignedInfo/dsig:Reference/dsig:DigestValue/text()',
-      document,
-      true
-    ).toString()
+test('Test TrustStore verify', async () => {
+  const spy = jest.fn()
+  const store = new TrustStore([config.ca.cert], spy, false)
 
-    const signatureValue = select(
-      '//dsig:Signature/dsig:SignatureValue/text()',
-      document,
-      true
-    ).toString()
+  store.addIntermediary(config.intermediary.cert)
 
-    // Precomputed value
-    expect(digest).toEqual('7qBb+2dONa5AbfIYi12E+X3KAYQ=')
-  })
+  // Intermediary was added
+  expect(store.getIntermediaries()).not.toEqual([])
 
-  it('Signed document should pass verify', () => {
-    const soap = read('./data/soap.xml')
-    const signedXml = sign(
-      soap,
-      key,
-      ["//*[local-name(.)='Security']/*[local-name(.)='Timestamp']"],
-      {
-        wssecurity: true,
-        location: {
-          reference: "/*/*[local-name(.)='Header']/*[local-name(.)='Security']",
-          action: 'append'
-        }
-      }
-    )
+  expect(await store.isCertificateTrusted(config.application.cert)).toEqual(true)
 
-    const document = new DOMParser().parseFromString(signedXml)
-    const signature = getSoapSignature(document)
+  // Trust store should not have requested issued the callback.
+  expect(spy).not.toBeCalled()
+})
 
-    expect(verifySignature(signedXml, signature, key.certificate)).toEqual(true)
-  })
+test('Test TrustStore callback/cache', async () => {
+  const spy = jest.fn()
+  const filename = 'test-file.pem'
+  const store = new TrustStore([], spy)
 
-  it('Test TrustStore verify', async () => {
-    const spy = jest.fn()
-    const store = new TrustStore([ca.certificate], spy, false)
+  // Disk cache returns one file which should be untrusted and not added to the system.
+  mockedFile.readdir.mockResolvedValueOnce([filename] as any)
+  mockedFile.readFile.mockResolvedValueOnce(config.key.getCertificate())
 
-    store.addIntermediary(intermediary.certificate)
+  // Test with no loading option
+  expect(await store.isCertificateTrusted(config.key.certificate, true)).toEqual(false)
 
-    // Intermediary was added
-    expect(store.getIntermediaries()).not.toEqual([])
+  // Should not attempt to load anything.
+  expect(mockedFile.readdir).not.toHaveBeenCalled()
+  expect(mockedFile.readFile).not.toHaveBeenCalled()
+  expect(spy).not.toHaveBeenCalled()
 
-    expect(await store.isCertificateTrusted(application.certificate)).toEqual(true)
+  // Try again - this time allow loading intermediaries
+  expect(await store.isCertificateTrusted(config.key.certificate)).toEqual(false)
 
-    // Trust store should not have requested issued the callback.
-    expect(spy).not.toBeCalled()
-  })
+  // Trust store requested new certificates with a callback.
+  expect(spy).toBeCalled()
 
-  it('Test TrustStore callback/cache', async () => {
-    const spy = jest.fn()
-    const filename = 'test-file.pem'
-    const store = new TrustStore([], spy)
+  // Disk cache attempted to access file.
+  expect(mockedFile.readFile).toHaveBeenCalled()
 
-    // Disk cache returns one file which should be untrusted and not added to the system.
-    mockedFile.readDirectory.mockResolvedValueOnce([filename] as any)
-    mockedFile.readFile.mockResolvedValueOnce(key.getPemCertificate() as any)
+  // Intermediary from disk was not added because it was not trusted.
+  expect(store.getIntermediaries()).toEqual([])
+})
 
-    // Test with no loading option
-    expect(await store.isCertificateTrusted(key.certificate, true)).toEqual(false)
+test('Test TrustStore cache', async () => {
+  const spy = jest.fn()
+  const filename = 'test-file.pem'
+  const store = new TrustStore([config.ca.cert], spy)
 
-    // Should not attempt to load anything.
-    expect(mockedFile.readDirectory).not.toHaveBeenCalled()
-    expect(mockedFile.readFile).not.toHaveBeenCalled()
-    expect(spy).not.toHaveBeenCalled()
+  // Disk cache returns no files.
+  mockedFile.readdir.mockResolvedValueOnce([filename] as any)
+  mockedFile.readFile.mockResolvedValueOnce(pki.certificateToPem(config.intermediary.cert) as any)
 
-    // Try again - this time allow loading intermediaries
-    expect(await store.isCertificateTrusted(key.certificate)).toEqual(false)
+  const trusted = await store.isCertificateTrusted(config.application.cert)
 
-    // Trust store requested new certificates with a callback.
-    expect(spy).toBeCalled()
+  // Certificate cannot be validated.
+  expect(trusted).toEqual(true)
 
-    // Disk cache attempted to access file.
-    expect(mockedFile.readFile).toHaveBeenCalled()
-    expect(mockedFile.readFile.mock.calls[0][0].endsWith(filename)).toEqual(true)
+  // Trust store requested new certificates with a callback.
+  expect(spy).not.toHaveBeenCalled()
+})
 
-    // Intermediary from disk was not added because it was not trusted.
-    expect(store.getIntermediaries()).toEqual([])
-  })
+test('Test adding intermediary certificates', async () => {
+  const spy = jest.fn()
+  const store = new TrustStore([config.ca.cert], spy, false)
 
-  it('Test TrustStore cache', async () => {
-    const spy = jest.fn()
-    const filename = 'test-file.pem'
-    const store = new TrustStore([ca.certificate], spy)
+  // Should not add untrusted certificate (no CA)
+  store.addIntermediary(config.key.certificate)
+  expect(store.getIntermediaries()).toEqual([])
 
-    // Disk cache returns no files.
-    mockedFile.readDirectory.mockResolvedValueOnce([filename] as any)
-    mockedFile.readFile.mockResolvedValueOnce(pki.certificateToPem(intermediary.certificate) as any)
+  // Should not add untrusted certificate (expired)
+  store.addIntermediary((await createCertificate('Expired', config.ca, { expired: true })).cert)
+  expect(store.getIntermediaries()).toEqual([])
 
-    const trusted = await store.isCertificateTrusted(application.certificate)
+  // Should add valid certificate (trusted)
+  store.addIntermediary(config.intermediary.cert)
+  expect(store.getIntermediaries().length).toEqual(1)
+})
 
-    // Certificate cannot be validated.
-    expect(trusted).toEqual(true)
+test('Test adding intermediary certificates to disk cache', done => {
+  const spy = jest.fn()
+  const store = new TrustStore([config.ca.cert], spy, true)
+  const mockImplementation: any = (fname: string, data: string) => {
+    expect(data).toEqual(pki.certificateToPem(config.intermediary.cert))
 
-    // Trust store requested new certificates with a callback.
-    expect(spy).not.toHaveBeenCalled()
-  })
+    done()
 
-  it('Test adding intermediary certificates', async () => {
-    const spy = jest.fn()
-    const store = new TrustStore([ca.certificate], spy, false)
+    // Writing to disk fails
+    return Promise.reject('Error')
+  }
 
-    // Should not add untrusted certificate (no CA)
-    store.addIntermediary(key.certificate)
-    expect(store.getIntermediaries()).toEqual([])
+  store.addIntermediary(config.intermediary.cert)
 
-    // Should not add untrusted certificate (expired)
-    store.addIntermediary(createCertificate('Expired', ca, { expired: true }).certificate)
-    expect(store.getIntermediaries()).toEqual([])
+  // This should not throw even when the disk operation fails
+  mockedFile.writeFile.mockImplementationOnce(mockImplementation)
 
-    // Should add valid certificate (trusted)
-    store.addIntermediary(intermediary.certificate)
-    expect(store.getIntermediaries().length).toEqual(1)
-  })
-
-  it('Test adding intermediary certificates to disk cache', done => {
-    const spy = jest.fn()
-    const store = new TrustStore([ca.certificate], spy, true)
-    const mockImplementation: any = (fname: string, data: string) => {
-      expect(data).toEqual(pki.certificateToPem(intermediary.certificate))
-
-      done()
-
-      // Writing to disk fails
-      return Promise.reject('Error')
-    }
-
-    store.addIntermediary(intermediary.certificate)
-
-    // This should not throw even when the disk operation fails
-    mockedFile.writeFile.mockImplementationOnce(mockImplementation)
-
-    expect.assertions(1)
-  })
+  expect.assertions(1)
 })
