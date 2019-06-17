@@ -928,10 +928,22 @@ img { max-width: 100%; }
 					<a href="key.html#privatekey" class="tsd-kind-icon">private<wbr>Key</a>
 				</li>
 				<li class=" tsd-kind-method tsd-parent-kind-class">
+					<a href="key.html#expires" class="tsd-kind-icon">expires</a>
+				</li>
+				<li class=" tsd-kind-method tsd-parent-kind-class">
 					<a href="key.html#getbase64certificate" class="tsd-kind-icon">get<wbr>Base64<wbr>Certificate</a>
 				</li>
 				<li class=" tsd-kind-method tsd-parent-kind-class">
-					<a href="key.html#getpemcertificate" class="tsd-kind-icon">get<wbr>Pem<wbr>Certificate</a>
+					<a href="key.html#getcertificate" class="tsd-kind-icon">get<wbr>Certificate</a>
+				</li>
+				<li class=" tsd-kind-method tsd-parent-kind-class">
+					<a href="key.html#getprivatekey" class="tsd-kind-icon">get<wbr>Private<wbr>Key</a>
+				</li>
+				<li class=" tsd-kind-method tsd-parent-kind-class">
+					<a href="key.html#isabouttoexpire" class="tsd-kind-icon">is<wbr>About<wbr>ToExpire</a>
+				</li>
+				<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-static">
+					<a href="key.html#generatekey" class="tsd-kind-icon">generate<wbr>Key</a>
 				</li>
 			</ul>
 		</li>
@@ -990,7 +1002,7 @@ img { max-width: 100%; }
 			<a href="../globals.html#x509tocertificate" class="tsd-kind-icon">X509<wbr>ToCertificate</a>
 		</li>
 		<li class=" tsd-kind-function">
-			<a href="../globals.html#createdirectory" class="tsd-kind-icon">create<wbr>Directory</a>
+			<a href="../globals.html#generatesigningrequest" class="tsd-kind-icon">generate<wbr>Signing<wbr>Request</a>
 		</li>
 		<li class=" tsd-kind-function">
 			<a href="../globals.html#getsignaturereferences" class="tsd-kind-icon">get<wbr>Signature<wbr>References</a>
@@ -1014,12 +1026,6 @@ img { max-width: 100%; }
 			<a href="../globals.html#parseresponseheader" class="tsd-kind-icon">parse<wbr>Response<wbr>Header</a>
 		</li>
 		<li class=" tsd-kind-function">
-			<a href="../globals.html#readdirectory" class="tsd-kind-icon">read<wbr>Directory</a>
-		</li>
-		<li class=" tsd-kind-function">
-			<a href="../globals.html#readfile" class="tsd-kind-icon">read<wbr>File</a>
-		</li>
-		<li class=" tsd-kind-function">
 			<a href="../globals.html#sign" class="tsd-kind-icon">sign</a>
 		</li>
 		<li class=" tsd-kind-function">
@@ -1028,9 +1034,6 @@ img { max-width: 100%; }
 		<li class=" tsd-kind-function">
 			<a href="../globals.html#verifysignature" class="tsd-kind-icon">verify<wbr>Signature</a>
 		</li>
-		<li class=" tsd-kind-function">
-			<a href="../globals.html#writefile" class="tsd-kind-icon">write<wbr>File</a>
-		</li>
 		<li class=" tsd-kind-object-literal">
 			<a href="../globals.html#namespaces" class="tsd-kind-icon">namespaces</a>
 		</li>
@@ -1038,6 +1041,15 @@ img { max-width: 100%; }
 </nav>
 <div class="container container-main">
 	<div class="content-wrap">
+		<section class="tsd-panel tsd-comment">
+			<div class="tsd-comment tsd-typography">
+				<div class="lead">
+					<p>Key object contains RSA private and public key pair.</p>
+				</div>
+				<p>This class also offers convinience methods for converting between file
+				formats. (wrappers for node-forge and nodejs crypto modules)</p>
+			</div>
+		</section>
 		<section class="tsd-panel tsd-hierarchy">
 			<h3>Hierarchy</h3>
 			<ul class="tsd-hierarchy">
@@ -1066,8 +1078,12 @@ img { max-width: 100%; }
 					<section class="tsd-index-section ">
 						<h3>Methods</h3>
 						<ul class="tsd-index-list">
+							<li class="tsd-kind-method tsd-parent-kind-class"><a href="key.html#expires" class="tsd-kind-icon">expires</a></li>
 							<li class="tsd-kind-method tsd-parent-kind-class"><a href="key.html#getbase64certificate" class="tsd-kind-icon">get<wbr>Base64<wbr>Certificate</a></li>
-							<li class="tsd-kind-method tsd-parent-kind-class"><a href="key.html#getpemcertificate" class="tsd-kind-icon">get<wbr>Pem<wbr>Certificate</a></li>
+							<li class="tsd-kind-method tsd-parent-kind-class"><a href="key.html#getcertificate" class="tsd-kind-icon">get<wbr>Certificate</a></li>
+							<li class="tsd-kind-method tsd-parent-kind-class"><a href="key.html#getprivatekey" class="tsd-kind-icon">get<wbr>Private<wbr>Key</a></li>
+							<li class="tsd-kind-method tsd-parent-kind-class"><a href="key.html#isabouttoexpire" class="tsd-kind-icon">is<wbr>About<wbr>ToExpire</a></li>
+							<li class="tsd-kind-method tsd-parent-kind-class tsd-is-static"><a href="key.html#generatekey" class="tsd-kind-icon">generate<wbr>Key</a></li>
 						</ul>
 					</section>
 				</div>
@@ -1085,7 +1101,7 @@ img { max-width: 100%; }
 					<li class="tsd-description">
 						<aside class="tsd-sources">
 							<ul>
-								<li>Defined in <a href="https://github.com/hyrsky/pankkiyhteys/blob/adcae50/src/trust.ts#L25">trust.ts:25</a></li>
+								<li>Defined in <a href="https://github.com/hyrsky/pankkiyhteys/blob/d51aff0/src/trust.ts#L33">trust.ts:33</a></li>
 							</ul>
 						</aside>
 						<h4 class="tsd-parameters-title">Parameters</h4>
@@ -1110,7 +1126,7 @@ img { max-width: 100%; }
 				<div class="tsd-signature tsd-kind-icon">certificate<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Certificate</span></div>
 				<aside class="tsd-sources">
 					<ul>
-						<li>Defined in <a href="https://github.com/hyrsky/pankkiyhteys/blob/adcae50/src/trust.ts#L25">trust.ts:25</a></li>
+						<li>Defined in <a href="https://github.com/hyrsky/pankkiyhteys/blob/d51aff0/src/trust.ts#L33">trust.ts:33</a></li>
 					</ul>
 				</aside>
 			</section>
@@ -1120,13 +1136,35 @@ img { max-width: 100%; }
 				<div class="tsd-signature tsd-kind-icon">private<wbr>Key<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
 				<aside class="tsd-sources">
 					<ul>
-						<li>Defined in <a href="https://github.com/hyrsky/pankkiyhteys/blob/adcae50/src/trust.ts#L24">trust.ts:24</a></li>
+						<li>Defined in <a href="https://github.com/hyrsky/pankkiyhteys/blob/d51aff0/src/trust.ts#L32">trust.ts:32</a></li>
 					</ul>
 				</aside>
 			</section>
 		</section>
 		<section class="tsd-panel-group tsd-member-group ">
 			<h2>Methods</h2>
+			<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class">
+				<a name="expires" class="tsd-anchor"></a>
+				<h3>expires</h3>
+				<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class">
+					<li class="tsd-signature tsd-kind-icon">expires<span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Date</span></li>
+				</ul>
+				<ul class="tsd-descriptions">
+					<li class="tsd-description">
+						<aside class="tsd-sources">
+							<ul>
+								<li>Defined in <a href="https://github.com/hyrsky/pankkiyhteys/blob/d51aff0/src/trust.ts#L56">trust.ts:56</a></li>
+							</ul>
+						</aside>
+						<div class="tsd-comment tsd-typography">
+							<div class="lead">
+								<p>Return certificate expiration date</p>
+							</div>
+						</div>
+						<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Date</span></h4>
+					</li>
+				</ul>
+			</section>
 			<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class">
 				<a name="getbase64certificate" class="tsd-anchor"></a>
 				<h3>get<wbr>Base64<wbr>Certificate</h3>
@@ -1137,7 +1175,7 @@ img { max-width: 100%; }
 					<li class="tsd-description">
 						<aside class="tsd-sources">
 							<ul>
-								<li>Defined in <a href="https://github.com/hyrsky/pankkiyhteys/blob/adcae50/src/trust.ts#L32">trust.ts:32</a></li>
+								<li>Defined in <a href="https://github.com/hyrsky/pankkiyhteys/blob/d51aff0/src/trust.ts#L74">trust.ts:74</a></li>
 							</ul>
 						</aside>
 						<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span></h4>
@@ -1145,19 +1183,90 @@ img { max-width: 100%; }
 				</ul>
 			</section>
 			<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class">
-				<a name="getpemcertificate" class="tsd-anchor"></a>
-				<h3>get<wbr>Pem<wbr>Certificate</h3>
+				<a name="getcertificate" class="tsd-anchor"></a>
+				<h3>get<wbr>Certificate</h3>
 				<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class">
-					<li class="tsd-signature tsd-kind-icon">get<wbr>Pem<wbr>Certificate<span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">string</span></li>
+					<li class="tsd-signature tsd-kind-icon">get<wbr>Certificate<span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">string</span></li>
 				</ul>
 				<ul class="tsd-descriptions">
 					<li class="tsd-description">
 						<aside class="tsd-sources">
 							<ul>
-								<li>Defined in <a href="https://github.com/hyrsky/pankkiyhteys/blob/adcae50/src/trust.ts#L36">trust.ts:36</a></li>
+								<li>Defined in <a href="https://github.com/hyrsky/pankkiyhteys/blob/d51aff0/src/trust.ts#L63">trust.ts:63</a></li>
 							</ul>
 						</aside>
+						<div class="tsd-comment tsd-typography">
+							<div class="lead">
+								<p>Get PEM encoded certificate</p>
+							</div>
+						</div>
 						<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span></h4>
+					</li>
+				</ul>
+			</section>
+			<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class">
+				<a name="getprivatekey" class="tsd-anchor"></a>
+				<h3>get<wbr>Private<wbr>Key</h3>
+				<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class">
+					<li class="tsd-signature tsd-kind-icon">get<wbr>Private<wbr>Key<span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">string</span></li>
+				</ul>
+				<ul class="tsd-descriptions">
+					<li class="tsd-description">
+						<aside class="tsd-sources">
+							<ul>
+								<li>Defined in <a href="https://github.com/hyrsky/pankkiyhteys/blob/d51aff0/src/trust.ts#L70">trust.ts:70</a></li>
+							</ul>
+						</aside>
+						<div class="tsd-comment tsd-typography">
+							<div class="lead">
+								<p>Get PEM encoded private key</p>
+							</div>
+						</div>
+						<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span></h4>
+					</li>
+				</ul>
+			</section>
+			<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class">
+				<a name="isabouttoexpire" class="tsd-anchor"></a>
+				<h3>is<wbr>About<wbr>ToExpire</h3>
+				<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class">
+					<li class="tsd-signature tsd-kind-icon">is<wbr>About<wbr>ToExpire<span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">boolean</span></li>
+				</ul>
+				<ul class="tsd-descriptions">
+					<li class="tsd-description">
+						<aside class="tsd-sources">
+							<ul>
+								<li>Defined in <a href="https://github.com/hyrsky/pankkiyhteys/blob/d51aff0/src/trust.ts#L47">trust.ts:47</a></li>
+							</ul>
+						</aside>
+						<div class="tsd-comment tsd-typography">
+							<div class="lead">
+								<p>Return true if certificate is about to expire (less than a month remaining).</p>
+							</div>
+						</div>
+						<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">boolean</span></h4>
+					</li>
+				</ul>
+			</section>
+			<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-static">
+				<a name="generatekey" class="tsd-anchor"></a>
+				<h3><span class="tsd-flag ts-flagStatic">Static</span> generate<wbr>Key</h3>
+				<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-static">
+					<li class="tsd-signature tsd-kind-icon">generate<wbr>Key<span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">any</span><span class="tsd-signature-symbol">&gt;</span></li>
+				</ul>
+				<ul class="tsd-descriptions">
+					<li class="tsd-description">
+						<aside class="tsd-sources">
+							<ul>
+								<li>Defined in <a href="https://github.com/hyrsky/pankkiyhteys/blob/d51aff0/src/trust.ts#L81">trust.ts:81</a></li>
+							</ul>
+						</aside>
+						<div class="tsd-comment tsd-typography">
+							<div class="lead">
+								<p>Generate new rsa private key.</p>
+							</div>
+						</div>
+						<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">any</span><span class="tsd-signature-symbol">&gt;</span></h4>
 					</li>
 				</ul>
 			</section>
