@@ -155,7 +155,11 @@ export class Client extends SoapClient {
       FileType: options.FileType
     })
 
-    return response.ApplicationResponse.FileDescriptors.FileDescriptor
+    if (Array.isArray(response.ApplicationResponse.FileDescriptors.FileDescriptor)) {
+      return response.ApplicationResponse.FileDescriptors.FileDescriptor
+    }
+
+    return [response.ApplicationResponse.FileDescriptors.FileDescriptor]
   }
 
   /**
