@@ -29,17 +29,6 @@
     "commit": "git-cz",
     "semantic-release": "semantic-release"
   },
-  "lint-staged": {
-    "{src,test}/**/*.ts": [
-      "prettier --write",
-      "git add"
-    ]
-  },
-  "config": {
-    "commitizen": {
-      "path": "node_modules/cz-conventional-changelog"
-    }
-  },
   "jest": {
     "transform": {
       ".(ts|tsx)": "ts-jest"
@@ -75,43 +64,67 @@
       "@commitlint/config-conventional"
     ]
   },
-  "devDependencies": {
-    "@commitlint/cli": "^8.0.0",
-    "@commitlint/config-conventional": "^8.0.0",
-    "@types/debug": "^4.1.4",
-    "@types/jest": "^24.0.15",
-    "@types/node": "^10.0",
-    "@types/request-promise-native": "^1.0.16",
-    "@types/uuid": "^3.4.4",
-    "@types/xmldom": "^0.1.29",
-    "commitizen": "^3.1.1",
-    "coveralls": "^3.0.4",
-    "cz-conventional-changelog": "^2.1.0",
-    "husky": "^2.4.1",
-    "jest": "^24.8.0",
-    "jest-config": "^24.8.0",
-    "lint-staged": "^8.2.1",
-    "prettier": "^1.18.2",
-    "rimraf": "^2.6.2",
-    "semantic-release": "^15.13.16",
-    "source-map-support": "^0.5.12",
-    "ts-jest": "^24.0.2",
-    "ts-node": "^8.3.0",
-    "tslint": "^5.17.0",
-    "tslint-config-prettier": "^1.15.0",
-    "tslint-config-standard": "^8.0.1",
-    "typedoc": "^0.14.2",
-    "typescript": "^3.5.2"
-  },
   "husky": {
     "hooks": {
-      "pre-commit": "lint-staged"
+      "pre-commit": "lint-staged",
+      "commit-msg": "commitlint -E HUSKY_GIT_PARAMS"
     }
+  },
+  "lint-staged": {
+    "{src,test}/**/*.ts": [
+      "prettier --write",
+      "git add"
+    ]
+  },
+  "config": {
+    "commitizen": {
+      "path": "node_modules/cz-conventional-changelog"
+    }
+  },
+  "release": {
+    "plugins": [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      "@semantic-release/changelog",
+      "@semantic-release/npm",
+      "@semantic-release/github",
+      "@semantic-release/git"
+    ]
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^8.1.0",
+    "@commitlint/config-conventional": "^8.1.0",
+    "@semantic-release/changelog": "^3.0.4",
+    "@semantic-release/git": "^7.0.16",
+    "@types/debug": "^4.1.5",
+    "@types/jest": "^24.0.17",
+    "@types/node": "^10.14.15",
+    "@types/request-promise-native": "^1.0.16",
+    "@types/uuid": "^3.4.5",
+    "@types/xmldom": "^0.1.29",
+    "commitizen": "^4.0.3",
+    "coveralls": "^3.0.6",
+    "cz-conventional-changelog": "^3.0.2",
+    "husky": "^3.0.3",
+    "jest": "^24.8.0",
+    "jest-config": "^24.8.0",
+    "lint-staged": "^9.2.1",
+    "prettier": "^1.18.2",
+    "rimraf": "^2.6.2",
+    "semantic-release": "^15.13.19",
+    "source-map-support": "^0.5.13",
+    "ts-jest": "^24.0.2",
+    "ts-node": "^8.3.0",
+    "tslint": "^5.18.0",
+    "tslint-config-prettier": "^1.15.0",
+    "tslint-config-standard": "^8.0.1",
+    "typedoc": "^0.15.0",
+    "typescript": "^3.5.3"
   },
   "dependencies": {
     "debug": "^4.1.1",
-    "fast-xml-parser": "^3.12.14",
-    "node-forge": "^0.8.1",
+    "fast-xml-parser": "^3.12.19",
+    "node-forge": "^0.8.5",
     "request": "^2.88.0",
     "request-promise-native": "^1.0.7",
     "uuid": "^3.3.2",
