@@ -124,7 +124,7 @@
   "dependencies": {
     "debug": "^4.1.1",
     "fast-xml-parser": "^3.12.19",
-    "node-forge": "^0.8.5",
+    "node-forge": "^0.10.0",
     "request": "^2.88.0",
     "request-promise-native": "^1.0.7",
     "uuid": "^3.3.2",
