@@ -125,7 +125,11 @@ export default class SoapClient {
          * @note cert request envelopes are not signed
          */
 
-        return responseBody.firstChild
+        if (responseBody) {
+          return (responseBody as Node).firstChild
+        }
+
+        return null
       })
   }
 

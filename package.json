@@ -33,7 +33,6 @@
     "transform": {
       ".(ts|tsx)": "ts-jest"
     },
-    "testEnvironment": "node",
     "testRegex": "(/__tests__/.*|\\.(test|spec))\\.(ts|js)$",
     "moduleFileExtensions": [
       "ts",
@@ -106,15 +105,15 @@
     "coveralls": "^3.0.6",
     "cz-conventional-changelog": "^3.0.2",
     "husky": "^3.0.3",
-    "jest": "^24.8.0",
+    "jest": "^27.0.5",
     "jest-config": "^24.8.0",
     "lint-staged": "^9.2.1",
     "prettier": "^1.18.2",
     "rimraf": "^2.6.2",
     "semantic-release": "^15.13.19",
     "source-map-support": "^0.5.13",
-    "ts-jest": "^24.0.2",
-    "ts-node": "^8.3.0",
+    "ts-jest": "^27.0.3",
+    "ts-node": "^10.0.0",
     "tslint": "^5.18.0",
     "tslint-config-prettier": "^1.15.0",
     "tslint-config-standard": "^8.0.1",
@@ -130,7 +129,7 @@
     "uuid": "^3.3.2",
     "xml-crypto": "^1.2.0",
     "xmlbuilder": "^13.0.2",
-    "xmldom": "^0.1.27",
-    "xpath": "0.0.27"
+    "xmldom": "^0.6.0",
+    "xpath": "^0.0.32"
   }
 }

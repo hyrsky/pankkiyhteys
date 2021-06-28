@@ -16,7 +16,7 @@ let config = {} as { [key: string]: any }
  * Generate some test data beforehand
  *
  */
-beforeAll(async done => {
+beforeAll(async () => {
   const [privateKey, certificate] = await Promise.all([
     await readFile('data/key.pem'),
     await readFile('data/certificate.pem')
@@ -35,8 +35,6 @@ beforeAll(async done => {
     intermediary,
     application
   }
-
-  done()
 })
 
 beforeEach(() => {

@@ -38,20 +38,16 @@ it('Test sign xml', async () => {
     dsig: namespaces.dsig
   })
 
-  const digest = select(
-    '//dsig:SignedInfo/dsig:Reference/dsig:DigestValue/text()',
-    document,
-    true
-  ).toString()
+  const digest = select('//dsig:SignedInfo/dsig:Reference/dsig:DigestValue/text()', document, true)
 
-  const signatureValue = select(
-    '//dsig:Signature/dsig:SignatureValue/text()',
-    document,
-    true
-  ).toString()
+  const signatureValue = select('//dsig:Signature/dsig:SignatureValue/text()', document, true)
 
   // Precomputed value
-  expect(digest).toEqual('7qBb+2dONa5AbfIYi12E+X3KAYQ=')
+  expect(digest).not.toBeNull()
+
+  if (digest) {
+    expect(digest.toString()).toEqual('7qBb+2dONa5AbfIYi12E+X3KAYQ=')
+  }
 })
 
 it('verify(sign(msg)) === truthy', async () => {

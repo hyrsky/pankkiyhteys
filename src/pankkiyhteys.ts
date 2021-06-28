@@ -119,13 +119,17 @@ export class OsuuspankkiCertService extends SoapClient implements app.CertServic
         document
       )
 
-      for (let cert of certificates) {
-        const format = xpath.select("./*[local-name()='CertificateFormat']/text()", cert, true)
-        const data = xpath.select("./*[local-name()='Certificate']/text()", cert, true).toString()
+      for (let cert of certificates as Array<any>) {
+        if (cert) {
+          const format = xpath.select("./*[local-name()='CertificateFormat']/text()", cert, true)
+          const data = xpath.select("./*[local-name()='Certificate']/text()", cert, true)
 
-        // @todo: test format?
+          // @todo: test format?
 
-        trustStore.addIntermediary(X509ToCertificate(data))
+          if (data) {
+            trustStore.addIntermediary(X509ToCertificate(data.toString()))
+          }
+        }
       }
 
       /**

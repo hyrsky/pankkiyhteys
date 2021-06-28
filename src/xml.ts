@@ -32,7 +32,7 @@ export function getSignatureReferences(signature: any) {
     dsig: namespaces.dsig
   })
 
-  return select('./dsig:SignedInfo/dsig:Reference/@URI', signature).map(({ value }) => value)
+  return select('./dsig:SignedInfo/dsig:Reference/@URI', signature).map(({ value }: any) => value)
 }
 
 /**
@@ -67,7 +67,7 @@ export function isElementSigned(element: any, signature: any): boolean {
       true
     )
 
-    return attribute !== undefined && attribute.value === DSIG_ENVELOPED_SIGNATURE
+    return attribute !== undefined && (attribute as any).value === DSIG_ENVELOPED_SIGNATURE
   } else {
     // Get reference ids whitout leading '#'
     const references = getSignatureReferences(signature).map(value => value.substr(1))
@@ -122,7 +122,7 @@ export function getSoapCertificate(signature: any): pki.Certificate {
     `//*[@*[local-name(.)='Id']='${uri}']/text()`,
     signature.ownerDocument,
     true
-  )
+  ) as any
 
   return X509ToCertificate(data)
 }

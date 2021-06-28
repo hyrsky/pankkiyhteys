@@ -12,7 +12,7 @@ describe('Test osuuspankki client', () => {
   let key!: Key
   let getFiles: any
 
-  beforeAll(async done => {
+  beforeAll(async () => {
     const [privateKey, certificate] = await Promise.all([
       readFile('data/key.pem'),
       readFile('data/certificate.pem')
@@ -22,8 +22,6 @@ describe('Test osuuspankki client', () => {
 
     const getFilesMsg = new DOMParser().parseFromString(await readFile('data/GetFilesResponse.xml'))
     getFiles = select('/soap:Envelope/soap:Body/*', getFilesMsg, true)
-
-    done()
   })
 
   const select = xpath.useNamespaces({ soap: namespaces.soap })

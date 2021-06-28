@@ -19,7 +19,7 @@ const gunzip = promisify(zlib.gunzip)
 export const VERSION_STRING = 'pankkiyhteys v0.10'
 
 type XMLDocument = any
-type XMLElement = ReturnType<xpath.XPathSelect>
+type XMLElement = Node
 
 export interface ApplicationRequest {
   '@xmlns': 'http://bxd.fi/xmldata/'
@@ -289,8 +289,10 @@ export function parseResponseHeader(response: XMLElement): ResponseHeader {
   const header = xpath.select("./*[local-name()='ResponseHeader']/*/text()", response)
   const data: any = {}
 
-  for (let node of header) {
-    data[node.parentNode.nodeName] = node.data
+  if (header) {
+    for (let node of header as Array<any>) {
+      data[node.parentNode.nodeName] = node.data
+    }
   }
 
   return data
@@ -303,7 +305,11 @@ export function parseResponseHeader(response: XMLElement): ResponseHeader {
  * @param preprocess Preprocess ApplicationResponse callback
  */
 export async function parseApplicationResponse(response: XMLElement, preprocess?: ParsePreprocess) {
-  const { data } = xpath.select("./*[local-name()='ApplicationResponse']/text()", response, true)
+  const { data } = xpath.select(
+    "./*[local-name()='ApplicationResponse']/text()",
+    response,
+    true
+  ) as any
 
   const xml = Buffer.from(data, 'base64').toString()
   const document = new DOMParser().parseFromString(xml)
@@ -337,10 +343,18 @@ export async function verifyApplicationRequestSignature(
   noLoading = false
 ) {
   const select = xpath.useNamespaces({ dsig: namespaces.dsig })
-  const signature = select('/*/dsig:Signature', document, true)
-  const certificate = X509ToCertificate(
-    select('./dsig:KeyInfo/dsig:X509Data/dsig:X509Certificate/text()', signature, true).toString()
+  const signature = select('/*/dsig:Signature', document, true) as Node
+  const certificateText = select(
+    './dsig:KeyInfo/dsig:X509Data/dsig:X509Certificate/text()',
+    signature,
+    true
   )
+
+  if (!certificateText) {
+    throw new Error('dsig:Signature is malformed')
+  }
+
+  const certificate = X509ToCertificate(certificateText.toString())
 
   if (!isElementSigned(document, signature)) {
     throw new Error('ApplicationRequest is not signed')
