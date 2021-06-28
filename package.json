@@ -20,7 +20,8 @@
   "scripts": {
     "lint": "eslint 'src/**/*.{js,json,ts,tsx}'",
     "prebuild": "rimraf dist",
-    "build": "tsc --module commonJS && typedoc --out docs --target es6 --theme minimal --mode file src --excludeNotExported",
+    "build": "tsc --module commonJS && npm run docs",
+    "docs": "typedoc --out docs --theme minimal src",
     "test": "jest --coverage",
     "debug": "node --inspect-brk ./node_modules/.bin/jest --runInBand",
     "test:watch": "jest --coverage --watch",

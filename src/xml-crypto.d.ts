@@ -1,10 +1,3 @@
-type DOMImplementation = any
-type XPathNSResolver = any
-type XPathResult = any
-type Attr = any
-type Document = any
-type Node = any
-
 declare module 'xml-crypto' {
   interface ComputeSignatureOptions {
     prefix?: string
