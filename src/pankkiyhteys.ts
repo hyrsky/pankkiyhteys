@@ -7,7 +7,7 @@ import * as xpath from 'xpath'
 import createDebug from 'debug'
 
 import SoapClient from './soap'
-import TrustStore, { generateSigningRequest, sign, Key } from './trust'
+import TrustStore, { generateSigningRequest, Key } from './trust'
 import { X509ToCertificate } from './xml'
 import * as app from './application'
 
@@ -150,7 +150,7 @@ export class Osuuspankki extends app.Client {
 
   constructor(
     username: string,
-    key: Key,
+    key: Key | undefined,
     language: app.Language,
     environment = app.Environment.PRODUCTION
   ) {
@@ -179,8 +179,6 @@ export class Osuuspankki extends app.Client {
    *
    * Client must save the private key to persistent storage before calling this method.
    *
-   * @todo: replace currently used key
-   *
    * @param privateKey RSA private key (pem)
    */
   async getCertificate(privateKey: string) {
@@ -204,6 +202,77 @@ export class Osuuspankki extends app.Client {
         .create({ CertApplicationRequest: request }, { version: '1.0', encoding: 'UTF-8' })
         .end()
     )
+
+    // Cert service envelopes are not signed.
+    const response = await this.makeSoapRequest(
+      OsuuspankkiCertService.getEndpoint(this.environment),
+      {
+        getCertificatein: {
+          '@xmlns': 'http://mlp.op.fi/OPCertificateService',
+          RequestHeader: {
+            SenderId: this.username,
+            RequestId: this.requestId(),
+            Timestamp: this.formatTime(new Date())
+          },
+          ApplicationRequest: Buffer.from(requestXml).toString('base64')
+        }
+      }
+    )
+
+    const applicationResponse = await app.parseApplicationResponse(
+      response,
+      this.verifyRequestCallback
+    )
+
+    const {
+      CertApplicationResponse: {
+        Certificates: {
+          Certificate: { Name, Certificate, CertificateFormat }
+        }
+      }
+    } = applicationResponse
+
+    const newCert = pki.certificateToPem(X509ToCertificate(Certificate))
+
+    // Start using the new key
+    this.key = new Key(privateKey, newCert)
+
+    return newCert
+  }
+
+  /**
+   * Get initial certificate from cert service using transfer key.
+   *
+   * Private must have following conditions:
+   *   * Modulus lenth = 2048
+   *   * If key already has signed certificate the current certificate will be returned instead.
+   *
+   * Client must save the private key to persistent storage before calling this method.
+   *
+   * @param privateKey RSA private key (pem)
+   * @param transferKey Bank issued transfer key
+   */
+  async getInitialCertificate(privateKey: string, transferKey: string) {
+    debug('getInitialCertificate')
+
+    const csr = generateSigningRequest(privateKey, this.username, 'FI')
+
+    const request: CertApplicationRequest = {
+      '@xmlns': 'http://op.fi/mlp/xmldata/',
+      CustomerId: this.username,
+      Timestamp: this.formatTime(new Date()),
+      Environment: this.environment,
+      SoftwareId: app.VERSION_STRING,
+      Service: 'MATU',
+      Content: csr,
+      TransferKey: transferKey
+    }
+
+    // Convert application request xml.
+    // Application request is not signed when using transfer key.
+    const requestXml = builder
+      .create({ CertApplicationRequest: request }, { version: '1.0', encoding: 'UTF-8' })
+      .end()
 
     // Cert service envelopes are not signed.
     const response = await this.makeSoapRequest(

@@ -107,7 +107,7 @@ export interface CertService {
 
 export class Client extends SoapClient {
   username: string
-  key: Key
+  key?: Key
   language: Language
   /** Bank identification code */
   bic: string
@@ -117,7 +117,7 @@ export class Client extends SoapClient {
 
   constructor(
     username: string,
-    key: Key,
+    key: Key | undefined,
     language: Language,
     bic: string,
     endpoint: string,
@@ -209,9 +209,10 @@ export class Client extends SoapClient {
     service: string,
     applicationRequest: ApplicationRequest,
     timestamp = new Date()
-  ) {
+  ): Promise<any> {
     debug('Request %s', service)
 
+    // This will throw Error without key.
     // Convert application request xml.
     const xml = this.signApplicationRequest(
       builder
@@ -267,6 +268,10 @@ export class Client extends SoapClient {
    * @param xml
    */
   protected signApplicationRequest(xml: string): string {
+    if (!this.key) {
+      throw new Error('Client does not have key')
+    }
+
     return sign(xml, this.key, [], {
       canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
     })

@@ -75,6 +75,44 @@ describe('Test osuuspankki client', () => {
     await expect(client.getFileList()).resolves.toBeTruthy()
   })
 
+  test('Should function without key', async () => {
+    const client = new Osuuspankki('test-username', undefined, 'EN', Environment.TEST)
+
+    // No network requests - return example data.
+    client.trustStore.isCertificateTrusted = jest.fn().mockResolvedValueOnce(true)
+    client.makeSoapRequest = jest.fn().mockResolvedValueOnce(getFiles)
+    client.certService.addIntermediaryCertificates = jest
+      .fn()
+      .mockRejectedValueOnce('Should not happen')
+
+    // Should fail when making request without key.
+    await expect(client.getFileList()).rejects.toBeTruthy()
+  })
+
+  test('Should get initial certificate without key', async () => {
+    const getCertDom = new DOMParser().parseFromString(
+      await readFile('data/GetCertificateResponse.xml')
+    )
+    const getCert = select('/soap:Envelope/soap:Body/*', getCertDom, true)
+
+    const newKey = await Key.generateKey()
+    const client = new Osuuspankki('test-username', undefined, 'EN', Environment.TEST)
+
+    // No network requests - return example data.
+    client.makeSoapRequest = jest.fn().mockResolvedValueOnce(getCert)
+
+    // Don't validate certificate
+    client.verifyRequestCallback = jest.fn().mockResolvedValueOnce(true)
+    client.trustStore.isCertificateTrusted = jest.fn().mockResolvedValueOnce(true)
+    client.certService.addIntermediaryCertificates = jest
+      .fn()
+      .mockRejectedValueOnce('Should not happen')
+
+    // Should always generate new private key when calling getCertificate.
+    // Real API would just return existing certificate.
+    await expect(client.getInitialCertificate(newKey, '0123456789ABCDEF')).resolves.toBeTruthy()
+  })
+
   test('Should get certificate from request', async () => {
     const getCertDom = new DOMParser().parseFromString(
       await readFile('data/GetCertificateResponse.xml')

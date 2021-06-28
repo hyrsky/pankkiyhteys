@@ -34,7 +34,7 @@ export default class SoapClient {
   /**
    * Generate 35 character long random request id.
    */
-  requestId() {
+  requestId(): string {
     return uuid().substr(0, 35)
   }
 
@@ -45,9 +45,15 @@ export default class SoapClient {
    * @param body Soap request body element.
    */
   makeSoapRequest(url: string, body: {}): Promise<any>
-  makeSoapRequest(url: string, body: {}, signatureKey: Key, trustStore: TrustStore): Promise<any>
+  // ?? I guess I have tried to make a type that requires truststore if key is present.
+  makeSoapRequest(url: string, body: {}, signatureKey?: Key, trustStore?: TrustStore): Promise<any>
 
-  async makeSoapRequest(url: string, body: {}, signatureKey?: Key, trustStore?: TrustStore) {
+  async makeSoapRequest(
+    url: string,
+    body: {},
+    signatureKey?: Key,
+    trustStore?: TrustStore
+  ): Promise<any> {
     debug('Soap request to %s', url)
 
     const envelope = {
