@@ -6,7 +6,7 @@ This library is an implementation of Web Services API, a standardised solution u
 
 Currently only [Osuuspankki](https://www.op.fi/) is supported.
 
-For in depth technical documentation about Web Services [click here](http://www.finanssiala.fi/maksujenvalitys/dokumentit/WebServices_Messages_20081022_105.pdf).
+For in depth technical documentation about Web Services [click here](https://www.finanssiala.fi/wp-content/uploads/2021/03/WebServices_Messages_v110_20200504.pdf).
 
 ## Install
 
