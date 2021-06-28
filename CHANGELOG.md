@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/hyrsky/pankkiyhteys/compare/v1.1.3...v1.2.0) (2021-06-28)
+
+
+### Features
+
+* support transfer keys ([7f2c955](https://github.com/hyrsky/pankkiyhteys/commit/7f2c95555095ba927712574db489bb7d2be2cd18))
+
 ## [1.1.3](https://github.com/hyrsky/pankkiyhteys/compare/v1.1.2...v1.1.3) (2021-06-28)
 
 
