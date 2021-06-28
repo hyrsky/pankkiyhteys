@@ -85,7 +85,7 @@ declare module 'node-forge' {
     interface oids {
       [key: string]: string
     }
-    var oids: oids
+    let oids: oids
 
     namespace ed25519 {
       type Key = ArrayBuffer

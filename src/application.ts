@@ -266,7 +266,7 @@ export class Client extends SoapClient {
    *
    * @param xml
    */
-  protected signApplicationRequest(xml: string) {
+  protected signApplicationRequest(xml: string): string {
     return sign(xml, this.key, [], {
       canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
     })
@@ -290,7 +290,7 @@ export function parseResponseHeader(response: XMLElement): ResponseHeader {
   const data: any = {}
 
   if (header) {
-    for (let node of header as Array<any>) {
+    for (const node of header as Array<any>) {
       data[node.parentNode.nodeName] = node.data
     }
   }
@@ -341,7 +341,7 @@ export async function verifyApplicationRequestSignature(
   document: any,
   trustStore: TrustStore,
   noLoading = false
-) {
+): Promise<true> {
   const select = xpath.useNamespaces({ dsig: namespaces.dsig })
   const signature = select('/*/dsig:Signature', document, true) as Node
   const certificateText = select(
