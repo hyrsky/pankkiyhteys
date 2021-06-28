@@ -1,3 +1,10 @@
+## [1.1.3](https://github.com/hyrsky/pankkiyhteys/compare/v1.1.2...v1.1.3) (2021-06-28)
+
+
+### Bug Fixes
+
+* fix build ([e6f1bae](https://github.com/hyrsky/pankkiyhteys/commit/e6f1baec972ebb78e46527491479e204be9f86b0))
+
 ## [1.1.2](https://github.com/hyrsky/pankkiyhteys/compare/v1.1.1...v1.1.2) (2021-06-28)
 
 
