@@ -1,25 +1,25 @@
 language: node_js
-node_js: '10'
+node_js: 'lts/*'
 cache: npm
 notifications:
   email: false
 jobs:
   include:
-  - stage: test
-    script:
-    - npm run test:prod
-  - stage: deploy
-    name: 'deploy docs'
-    script:
-      - npm run build
-      - npm run semantic-release
-    deploy:
-      provider: pages
-      local-dir: docs
-      skip-cleanup: true
-      github-token: "$GITHUB_TOKEN"
-      keep-history: true
-      on:
-        tags: true
-        branch: master
-        repo: hyrsky/pankkiyhteys
+    - stage: test
+      script:
+        - npm run test:prod
+    - stage: deploy
+      name: 'deploy docs'
+      script:
+        - npm run build
+        - npm run semantic-release
+      deploy:
+        provider: pages
+        local-dir: docs
+        skip-cleanup: true
+        github-token: '$GITHUB_TOKEN'
+        keep-history: true
+        on:
+          tags: true
+          branch: master
+          repo: hyrsky/pankkiyhteys
