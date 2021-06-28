@@ -1,3 +1,12 @@
+## [1.1.2](https://github.com/hyrsky/pankkiyhteys/compare/v1.1.1...v1.1.2) (2021-06-28)
+
+
+### Bug Fixes
+
+* update npm packages ([2efdd03](https://github.com/hyrsky/pankkiyhteys/commit/2efdd03e35f146ecffa1b003b1d4840f9308dd99))
+* update npm packages ([f36cf4f](https://github.com/hyrsky/pankkiyhteys/commit/f36cf4f2757e0d553612093ab73a757767df04a2))
+* update npm packages ([14f9a39](https://github.com/hyrsky/pankkiyhteys/commit/14f9a398ab85494c96e97c0bbd52abe35c77a150))
+
 ## [1.1.1](https://github.com/hyrsky/pankkiyhteys/compare/v1.1.0...v1.1.1) (2019-08-08)
 
 
