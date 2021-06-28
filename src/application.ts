@@ -81,7 +81,7 @@ export type Language = 'EN' | 'FI' | 'SV'
 
 export const enum Environment {
   PRODUCTION = 'PRODUCTION',
-  TEST = 'TEST',
+  TEST = 'TEST'
 }
 
 export interface GetFileListOptions {
@@ -152,7 +152,7 @@ export class Client extends SoapClient {
       Status: options.Status,
       Environment: this.environment,
       SoftwareId: VERSION_STRING,
-      FileType: options.FileType,
+      FileType: options.FileType
     })
 
     if (Array.isArray(response.ApplicationResponse.FileDescriptors.FileDescriptor)) {
@@ -179,7 +179,7 @@ export class Client extends SoapClient {
       FileReferences: { FileReference: fileReference },
       Compression: 'true',
       CompressionMethod: 'RFC1952',
-      SoftwareId: VERSION_STRING,
+      SoftwareId: VERSION_STRING
     })
 
     const { Compressed, CompressionMethod, Content } = response.ApplicationResponse
@@ -231,10 +231,10 @@ export class Client extends SoapClient {
             Timestamp: this.formatTime(timestamp),
             Language: this.language,
             UserAgent: VERSION_STRING,
-            ReceiverId: this.bic,
+            ReceiverId: this.bic
           },
-          ApplicationRequest: Buffer.from(xml).toString('base64'),
-        },
+          ApplicationRequest: Buffer.from(xml).toString('base64')
+        }
       },
       this.key,
       this.trustStore
@@ -257,7 +257,7 @@ export class Client extends SoapClient {
       Header: header,
       ...(applicationResponse as {
         ApplicationResponse: any
-      }),
+      })
     }
   }
 
@@ -268,7 +268,7 @@ export class Client extends SoapClient {
    */
   protected signApplicationRequest(xml: string): string {
     return sign(xml, this.key, [], {
-      canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
+      canonicalizationAlgorithm: 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
     })
   }
 
