@@ -18,7 +18,7 @@ export const namespaces = {
   soap: 'http://schemas.xmlsoap.org/soap/envelope/',
   dsig: 'http://www.w3.org/2000/09/xmldsig#',
   wsse: 'http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd',
-  wsu: 'http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd'
+  wsu: 'http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd',
 }
 
 export const WSS_X509V3 =
@@ -29,7 +29,7 @@ export const DSIG_ENVELOPED_SIGNATURE = 'http://www.w3.org/2000/09/xmldsig#envel
 
 export function getSignatureReferences(signature: any) {
   const select = xpath.useNamespaces({
-    dsig: namespaces.dsig
+    dsig: namespaces.dsig,
   })
 
   return select('./dsig:SignedInfo/dsig:Reference/@URI', signature).map(({ value }: any) => value)
@@ -56,7 +56,7 @@ export function isRootElement(element: any) {
 export function isElementSigned(element: any, signature: any): boolean {
   const select = xpath.useNamespaces({
     dsig: namespaces.dsig,
-    wsse: namespaces.wsse
+    wsse: namespaces.wsse,
   })
 
   if (isRootElement(element)) {
@@ -70,7 +70,7 @@ export function isElementSigned(element: any, signature: any): boolean {
     return attribute !== undefined && (attribute as any).value === DSIG_ENVELOPED_SIGNATURE
   } else {
     // Get reference ids whitout leading '#'
-    const references = getSignatureReferences(signature).map(value => value.substr(1))
+    const references = getSignatureReferences(signature).map((value) => value.substr(1))
 
     for (let i = 0; i < element.attributes.length; i++) {
       const { localName, value } = element.attributes[i]
@@ -94,7 +94,7 @@ export function getSoapSignature(document: any): any {
   const select = xpath.useNamespaces({
     soap: namespaces.soap,
     dsig: namespaces.dsig,
-    wsse: namespaces.wsse
+    wsse: namespaces.wsse,
   })
 
   return select('/soap:Envelope/soap:Header/wsse:Security/dsig:Signature', document, true)
@@ -108,7 +108,7 @@ export function getSoapSignature(document: any): any {
 export function getSoapCertificate(signature: any): pki.Certificate {
   const select = xpath.useNamespaces({
     dsig: namespaces.dsig,
-    wsse: namespaces.wsse
+    wsse: namespaces.wsse,
   })
 
   // Get uri to binary security token.

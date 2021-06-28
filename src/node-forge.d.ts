@@ -154,9 +154,7 @@ declare module 'node-forge' {
         const HASH_BYTE_LENGTH = 64
       }
 
-      function generateKeyPair(options?: {
-        seed?: Buffer | Uint8Array | string
-      }): {
+      function generateKeyPair(options?: { seed?: Buffer | Uint8Array | string }): {
         publicKey: NativeBuffer
         privateKey: NativeBuffer
       }
@@ -356,7 +354,7 @@ declare module 'node-forge' {
       UNIVERSAL = 0x00,
       APPLICATION = 0x40,
       CONTEXT_SPECIFIC = 0x80,
-      PRIVATE = 0xc0
+      PRIVATE = 0xc0,
     }
 
     enum Type {
@@ -380,7 +378,7 @@ declare module 'node-forge' {
       IA5STRING = 22,
       UTCTIME = 23,
       GENERALIZEDTIME = 24,
-      BMPSTRING = 30
+      BMPSTRING = 30,
     }
 
     interface Asn1 {
@@ -517,9 +515,7 @@ declare module 'node-forge' {
           safeBags: Bag[]
         }
       ]
-      getBags: (
-        filter: BagsFilter
-      ) => {
+      getBags: (filter: BagsFilter) => {
         [key: string]: Bag[] | undefined
         localKeyId?: Bag[]
         friendlyName?: Bag[]

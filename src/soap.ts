@@ -54,8 +54,8 @@ export default class SoapClient {
       'soap:Envelope': {
         '@xmlns:soap': xml.namespaces.soap,
         'soap:Header': {},
-        'soap:Body': body
-      }
+        'soap:Body': body,
+      },
     }
 
     // Assume client wants to sign the request if key was provided.
@@ -71,15 +71,15 @@ export default class SoapClient {
           '@soap:mustUnderstand': '1',
           'wsu:Timestamp': {
             'wsu:Created': this.formatTime(created),
-            'wsu:Expires': this.formatTime(expires)
+            'wsu:Expires': this.formatTime(expires),
           },
           'wsse:BinarySecurityToken': {
             '@wsu:Id': 'BinarySecurityToken',
             '@ValueType': xml.WSS_X509V3,
             '@EncodingType': xml.WSS_B64BINARY,
-            '#text': signatureKey.getBase64Certificate()
-          }
-        }
+            '#text': signatureKey.getBase64Certificate(),
+          },
+        },
       }
     }
 
@@ -99,14 +99,14 @@ export default class SoapClient {
       .post(url, {
         body: xmlBody,
         headers: {
-          'Content-Type': 'text/xml; charset=utf-8'
-        }
+          'Content-Type': 'text/xml; charset=utf-8',
+        },
       })
-      .then(async response => {
+      .then(async (response) => {
         const select = xpath.useNamespaces({
           soap: xml.namespaces.soap,
           dsig: xml.namespaces.dsig,
-          wsse: xml.namespaces.wsse
+          wsse: xml.namespaces.wsse,
         })
 
         console.log('Response', response)
@@ -149,7 +149,7 @@ export default class SoapClient {
     // Envelope body must be signed.
     const select = xpath.useNamespaces({
       soap: xml.namespaces.soap,
-      wsu: xml.namespaces.wsu
+      wsu: xml.namespaces.wsu,
     })
 
     // Body id must be signed
@@ -183,12 +183,12 @@ export default class SoapClient {
             'wsse:Reference': {
               '@xmlns:wsu': xml.namespaces.wsu,
               '@URI': `#${BINARY_SECURITY_TOKEN_ID}`,
-              '@ValueType': xml.WSS_X509V3
-            }
-          }
+              '@ValueType': xml.WSS_X509V3,
+            },
+          },
         },
         {
-          headless: true
+          headless: true,
         }
       )
       .end()
@@ -198,19 +198,19 @@ export default class SoapClient {
       key,
       [
         "/*[local-name(.)='Envelope']/*[local-name(.)='Header']/*/*[local-name(.)='Timestamp']",
-        "/*[local-name(.)='Envelope']/*[local-name(.)='Body']"
+        "/*[local-name(.)='Envelope']/*[local-name(.)='Body']",
       ],
       keyInfo,
       {
         wssecurity: true,
         location: {
           reference: "/*/*[local-name(.)='Header']/*[local-name(.)='Security']",
-          action: 'append'
+          action: 'append',
         },
         existingPrefixes: {
           wsse: xml.namespaces.wsse,
-          wsu: xml.namespaces.wsu
-        }
+          wsu: xml.namespaces.wsu,
+        },
       }
     )
   }

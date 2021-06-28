@@ -67,14 +67,14 @@ export class OsuuspankkiCertService extends SoapClient implements app.CertServic
   static getEndpoint(environment: app.Environment) {
     return {
       [app.Environment.PRODUCTION]: 'https://wsk.op.fi/services/OPCertificateService',
-      [app.Environment.TEST]: 'https://wsk.asiakastesti.op.fi/services/OPCertificateService'
+      [app.Environment.TEST]: 'https://wsk.asiakastesti.op.fi/services/OPCertificateService',
     }[environment]
   }
 
   getRootCA() {
     return {
       [app.Environment.PRODUCTION]: [OPPohjola],
-      [app.Environment.TEST]: [OPPohjolaTest]
+      [app.Environment.TEST]: [OPPohjolaTest],
     }[this.environment]
   }
 
@@ -87,7 +87,7 @@ export class OsuuspankkiCertService extends SoapClient implements app.CertServic
       Timestamp: this.formatTime(new Date()),
       Environment: this.environment,
       SoftwareId: app.VERSION_STRING,
-      Service: 'MATU'
+      Service: 'MATU',
     }
 
     // Convert application request xml.
@@ -104,10 +104,10 @@ export class OsuuspankkiCertService extends SoapClient implements app.CertServic
           RequestHeader: {
             SenderId: this.username,
             RequestId: this.requestId(),
-            Timestamp: this.formatTime(new Date())
+            Timestamp: this.formatTime(new Date()),
           },
-          ApplicationRequest: Buffer.from(requestXml).toString('base64')
-        }
+          ApplicationRequest: Buffer.from(requestXml).toString('base64'),
+        },
       }
     )
 
@@ -166,7 +166,7 @@ export class Osuuspankki extends app.Client {
   private static getEndpoint(environment: app.Environment) {
     return {
       [app.Environment.PRODUCTION]: 'https://wsk.op.fi/services/CorporateFileService',
-      [app.Environment.TEST]: 'https://wsk.asiakastesti.op.fi/services/CorporateFileService'
+      [app.Environment.TEST]: 'https://wsk.asiakastesti.op.fi/services/CorporateFileService',
     }[environment]
   }
 
@@ -195,7 +195,7 @@ export class Osuuspankki extends app.Client {
       Environment: this.environment,
       SoftwareId: app.VERSION_STRING,
       Service: 'MATU',
-      Content: csr
+      Content: csr,
     }
 
     // Convert application request xml.
@@ -214,10 +214,10 @@ export class Osuuspankki extends app.Client {
           RequestHeader: {
             SenderId: this.username,
             RequestId: this.requestId(),
-            Timestamp: this.formatTime(new Date())
+            Timestamp: this.formatTime(new Date()),
           },
-          ApplicationRequest: Buffer.from(requestXml).toString('base64')
-        }
+          ApplicationRequest: Buffer.from(requestXml).toString('base64'),
+        },
       }
     )
 
@@ -229,9 +229,9 @@ export class Osuuspankki extends app.Client {
     const {
       CertApplicationResponse: {
         Certificates: {
-          Certificate: { Name, Certificate, CertificateFormat }
-        }
-      }
+          Certificate: { Name, Certificate, CertificateFormat },
+        },
+      },
     } = applicationResponse
 
     const newCert = pki.certificateToPem(X509ToCertificate(Certificate))

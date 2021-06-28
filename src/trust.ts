@@ -86,12 +86,12 @@ export class Key {
       modulusLength,
       publicKeyEncoding: {
         type: 'spki',
-        format: 'pem'
+        format: 'pem',
       },
       privateKeyEncoding: {
         type: 'pkcs8',
-        format: 'pem'
-      }
+        format: 'pem',
+      },
     })
 
     return privateKey
@@ -134,12 +134,12 @@ export function generateSigningRequest(
   csr.setSubject([
     {
       name: 'commonName',
-      value: commonName
+      value: commonName,
     },
     {
       name: 'countryName',
-      value: countryName
-    }
+      value: countryName,
+    },
   ])
   csr.sign(privateKey)
 
@@ -219,7 +219,7 @@ export function sign(
         `<${prefix}X509Certificate>${key.getBase64Certificate()}</${prefix}X509Certificate>` +
         `</${prefix}X509Data>`
       )
-    }
+    },
   }
 
   signer.computeSignature(xml, options)
@@ -243,7 +243,7 @@ export function verifySignature(xml: string, signature: XMLElement, key: pki.Cer
   const signer = new SignedXml()
   signer.loadSignature(signature)
   signer.keyInfoProvider = {
-    getKey: () => pki.certificateToPem(key)
+    getKey: () => pki.certificateToPem(key),
   }
 
   return signer.checkSignature(xml)
@@ -396,11 +396,11 @@ export default class TrustStore {
 
     const files = await file.readdir(this.tmpDir)
     const certs = await Promise.all(
-      files.map(filename =>
+      files.map((filename) =>
         file
           .readFile(path.join(this.tmpDir, filename), 'utf8')
-          .then(data => pki.certificateFromPem(data))
-          .catch(err => debug(`Error loading ${filename} ${err}`))
+          .then((data) => pki.certificateFromPem(data))
+          .catch((err) => debug(`Error loading ${filename} ${err}`))
       )
     )
 
@@ -409,7 +409,7 @@ export default class TrustStore {
     }
 
     // Load found certificate to internal cache.
-    for (const cert of certs.filter(cert => cert) as pki.Certificate[]) {
+    for (const cert of certs.filter((cert) => cert) as pki.Certificate[]) {
       this.addIntermediary(cert, false)
     }
   }
@@ -424,6 +424,6 @@ export default class TrustStore {
     const filename = path.join(this.tmpDir, `${fingerprint}.pem`)
 
     // Ignore errors
-    file.writeFile(filename, pki.certificateToPem(certificate)).catch(err => debug(err))
+    file.writeFile(filename, pki.certificateToPem(certificate)).catch((err) => debug(err))
   }
 }
