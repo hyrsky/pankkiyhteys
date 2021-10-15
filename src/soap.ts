@@ -99,8 +99,6 @@ export default class SoapClient {
       xmlBody = this.signEnvelope(xmlBody, signatureKey)
     }
 
-    console.log('Request', xmlBody)
-
     return request
       .post(url, {
         body: xmlBody,
@@ -114,8 +112,6 @@ export default class SoapClient {
           dsig: xml.namespaces.dsig,
           wsse: xml.namespaces.wsse
         })
-
-        console.log('Response', response)
 
         const document = new DOMParser().parseFromString(response)
         const responseBody = select('/soap:Envelope/soap:Body', document, true)

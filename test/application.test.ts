@@ -114,7 +114,10 @@ describe('Test xml module', () => {
   it('Test getFile compression support', async () => {
     const certService: application.CertService = {
       getRootCA: jest.fn().mockReturnValue([]),
-      addIntermediaryCertificates: jest.fn()
+      addIntermediaryCertificates: jest.fn(),
+      applicationRequestXmlns: '',
+      certificateRequestXmlns: '',
+      getEndpoint: () => ''
     }
 
     const client = new application.Client(
