@@ -14,22 +14,6 @@ import { pki } from 'node-forge'
 
 export const debug = createDebug('pankkiyhteys')
 
-interface FileDescriptor {
-  FileReference: string
-  TargetId: string
-  UserFilename: string
-  ParentFileReference: string
-  FileType: string
-  FileTimestamp: string
-  Status: 'NEW' | 'WFP' | 'DLD'
-}
-
-interface FileListResponse {
-  ApplicationResponse: {
-    FileDescriptors: FileDescriptor[]
-  }
-}
-
 export { Key } from './trust'
 
 export interface CertApplicationRequest {
@@ -208,6 +192,15 @@ export class Osuuspankki extends app.Client {
   }
 }
 
+// In getFileList / getFile, Nordea requires some options to be present.
+interface NordeaRequiredGetFileOptions {
+  FileType: string
+  TargetId: string
+}
+interface NordeaRequiredGetFileListOptions extends NordeaRequiredGetFileOptions {
+  Status: app.FileStatus
+}
+
 export class Nordea extends app.Client {
   constructor(
     username: string,
@@ -232,5 +225,18 @@ export class Nordea extends app.Client {
 
   private static getEndpoint() {
     return `https://filetransfer.nordea.com/services/CorporateFileService`
+  }
+
+  override getFileList(
+    options: app.GetFileListOptions & NordeaRequiredGetFileListOptions
+  ): Promise<app.FileDescriptor[]> {
+    return super.getFileList(options)
+  }
+
+  override getFile(
+    fileReference: string,
+    options: app.GetFileOptions & NordeaRequiredGetFileOptions
+  ): Promise<Buffer> {
+    return super.getFile(fileReference, options)
   }
 }

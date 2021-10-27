@@ -86,10 +86,12 @@ export const enum Environment {
   TEST = 'TEST'
 }
 
+export type FileStatus = 'NEW' | 'DLD' | 'ALL'
+
 export interface GetFileListOptions {
   StartDate?: string
   EndDate?: string
-  Status?: 'NEW' | 'DLD' | 'ALL'
+  Status?: FileStatus
   FileType?: string
   TargetId?: string
 }
@@ -97,6 +99,17 @@ export interface GetFileListOptions {
 export interface GetFileOptions {
   FileType?: string
   TargetId?: string
+}
+
+export interface FileDescriptor {
+  FileReference: string | number
+  TargetId: string
+  ServiceId: string
+  UserFilename?: string
+  ParentFileReference?: string
+  FileType: string
+  FileTimestamp: string
+  Status: 'NEW' | 'WFP' | 'DLD'
 }
 
 export type ParsePreprocess = (xml: string, document: XMLDocument) => Promise<void> | void
@@ -160,7 +173,7 @@ export class Client extends SoapClient {
   /**
    * Get list of files
    */
-  async getFileList(options: GetFileListOptions = {}): Promise<any> {
+  async getFileList(options: GetFileListOptions = {}): Promise<FileDescriptor[]> {
     const response = await this.makeRequest('downloadFileListin', {
       '@xmlns': 'http://bxd.fi/xmldata/',
       CustomerId: this.username,
