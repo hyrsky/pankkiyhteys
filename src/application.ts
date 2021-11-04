@@ -44,7 +44,7 @@ export interface ApplicationRequest {
   /** Unique identification of the file that is the target of the operation. */
   FileReferences?: { FileReference: string }
   /** A name given to the file by the customer. */
-  UserFileName?: string
+  UserFilename?: string
   /** The logical folder name where the file(s) of the customer are stored in the bank. A user can have access to several folders. */
   TargetId?: string
   /** An identifier given the customer to identify this particular request. */
@@ -101,6 +101,13 @@ export interface GetFileOptions {
   TargetId?: string
 }
 
+export interface UploadFileOptions {
+  ServiceId: string
+  UserFilename: string
+  TargetId: string
+  FileType: string
+}
+
 export interface FileDescriptor {
   FileReference: string | number
   TargetId: string
@@ -110,6 +117,16 @@ export interface FileDescriptor {
   FileType: string
   FileTimestamp: string
   Status: 'NEW' | 'WFP' | 'DLD'
+}
+
+export interface FileUploadResult {
+  CustomerId?: number
+  Timestamp?: string
+  ResponseCode?: number
+  ResponseText?: string
+  Encrypted?: boolean
+  AmountTotal?: number
+  TransactionCount?: number
 }
 
 export type ParsePreprocess = (xml: string, document: XMLDocument) => Promise<void> | void
@@ -231,6 +248,33 @@ export class Client extends SoapClient {
 
     // Retrun content if data is not compressed.
     return Buffer.from(Content, 'base64')
+  }
+
+  /**
+   * Upload file
+   *
+   * Compresses given file Buffer with gzip, encodes it in base64 and sends
+   * it to the file transfer service.
+   *
+   * @param file File to send as a Buffer
+   * @param options Some additional options for the file upload API, like ServiceId
+   */
+  async uploadFile(file: Buffer, options: UploadFileOptions): Promise<FileUploadResult> {
+    const result = await this.makeRequest('uploadFilein', {
+      '@xmlns': 'http://bxd.fi/xmldata/',
+      CustomerId: this.username,
+      Command: 'UploadFile',
+      Timestamp: this.formatTime(new Date()),
+      ServiceId: options.ServiceId,
+      Environment: this.environment,
+      UserFilename: options.UserFilename,
+      TargetId: options.TargetId,
+      SoftwareId: VERSION_STRING,
+      FileType: options.FileType,
+      Content: file.toString('base64')
+    })
+    const { Signature, ...rest } = result.ApplicationResponse
+    return rest
   }
 
   /**
