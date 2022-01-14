@@ -253,8 +253,7 @@ export class Client extends SoapClient {
   /**
    * Upload file
    *
-   * Compresses given file Buffer with gzip, encodes it in base64 and sends
-   * it to the file transfer service.
+   * Encodes the given file Buffer in base64 and sends it to the file transfer service.
    *
    * @param file File to send as a Buffer
    * @param options Some additional options for the file upload API, like ServiceId
