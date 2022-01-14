@@ -21,6 +21,8 @@ export const VERSION_STRING = 'pankkiyhteys v0.10'
 type XMLDocument = any
 type XMLElement = Node
 
+export type CompressionMethod = 'RFC1952' | 'GZIP'
+
 export interface ApplicationRequest {
   '@xmlns': 'http://bxd.fi/xmldata/'
   /** Code used by the bank to identify the customer who originated this request. */
@@ -42,7 +44,7 @@ export interface ApplicationRequest {
   /** Unique identification of the file that is the target of the operation. */
   FileReferences?: { FileReference: string }
   /** A name given to the file by the customer. */
-  UserFileName?: string
+  UserFilename?: string
   /** The logical folder name where the file(s) of the customer are stored in the bank. A user can have access to several folders. */
   TargetId?: string
   /** An identifier given the customer to identify this particular request. */
@@ -54,7 +56,7 @@ export interface ApplicationRequest {
   /** Compression indicator for the content and compression request for the responses. */
   Compression?: 'true' | 'false'
   /** Name of the compression algorithm. */
-  CompressionMethod?: 'RFC1952'
+  CompressionMethod?: CompressionMethod
   /** Total sum of amounts in the file. */
   AmountTotal?: string
   /** Total sum of transactions in the file. */
@@ -84,16 +86,57 @@ export const enum Environment {
   TEST = 'TEST'
 }
 
+export type FileStatus = 'NEW' | 'DLD' | 'ALL'
+
 export interface GetFileListOptions {
   StartDate?: string
   EndDate?: string
-  Status?: 'NEW' | 'DLD' | 'ALL'
+  Status?: FileStatus
   FileType?: string
+  TargetId?: string
+}
+
+export interface GetFileOptions {
+  FileType?: string
+  TargetId?: string
+}
+
+export interface UploadFileOptions {
+  ServiceId: string
+  UserFilename: string
+  TargetId: string
+  FileType: string
+}
+
+export interface FileDescriptor {
+  FileReference: string | number
+  TargetId: string
+  ServiceId: string
+  UserFilename?: string
+  ParentFileReference?: string
+  FileType: string
+  FileTimestamp: string
+  Status: 'NEW' | 'WFP' | 'DLD'
+}
+
+export interface FileUploadResult {
+  CustomerId?: number
+  Timestamp?: string
+  ResponseCode?: number
+  ResponseText?: string
+  Encrypted?: boolean
+  AmountTotal?: number
+  TransactionCount?: number
 }
 
 export type ParsePreprocess = (xml: string, document: XMLDocument) => Promise<void> | void
 
 export interface CertService {
+  applicationRequestXmlns: string
+  certificateRequestXmlns: string
+
+  getEndpoint(environment: Environment): string
+
   /**
    * Get root CA certificates
    */
@@ -114,6 +157,8 @@ export class Client extends SoapClient {
   endpoint: string
   environment: Environment
   trustStore: TrustStore
+  certService: CertService
+  compressionMethod: CompressionMethod
 
   constructor(
     username: string,
@@ -122,7 +167,8 @@ export class Client extends SoapClient {
     bic: string,
     endpoint: string,
     certService: CertService,
-    environment = Environment.PRODUCTION
+    environment = Environment.PRODUCTION,
+    compressionMethod: CompressionMethod = 'RFC1952'
   ) {
     super()
 
@@ -132,6 +178,8 @@ export class Client extends SoapClient {
     this.bic = bic
     this.endpoint = endpoint
     this.environment = environment
+    this.certService = certService
+    this.compressionMethod = compressionMethod
 
     // Initialize truststore with knowledge of how to fetch intermediary certificates.
     this.trustStore = new TrustStore(certService.getRootCA(), async () => {
@@ -142,15 +190,17 @@ export class Client extends SoapClient {
   /**
    * Get list of files
    */
-  async getFileList(options: GetFileListOptions = {}): Promise<any> {
+  async getFileList(options: GetFileListOptions = {}): Promise<FileDescriptor[]> {
     const response = await this.makeRequest('downloadFileListin', {
       '@xmlns': 'http://bxd.fi/xmldata/',
       CustomerId: this.username,
+      Command: 'DownloadFileList',
       Timestamp: this.formatTime(new Date()),
       StartDate: options.StartDate,
       EndDate: options.EndDate,
       Status: options.Status,
       Environment: this.environment,
+      TargetId: options.TargetId,
       SoftwareId: VERSION_STRING,
       FileType: options.FileType
     })
@@ -170,23 +220,26 @@ export class Client extends SoapClient {
    *
    * @param fileReference Unique identification of the file.
    */
-  async getFile(fileReference: string): Promise<Buffer> {
+  async getFile(fileReference: string, options: GetFileOptions = {}): Promise<Buffer> {
     const response = await this.makeRequest('downloadFilein', {
       '@xmlns': 'http://bxd.fi/xmldata/',
       CustomerId: this.username,
+      Command: 'DownloadFile',
       Timestamp: this.formatTime(new Date()),
       Environment: this.environment,
       FileReferences: { FileReference: fileReference },
+      TargetId: options.TargetId,
       Compression: 'true',
-      CompressionMethod: 'RFC1952',
-      SoftwareId: VERSION_STRING
+      CompressionMethod: this.compressionMethod,
+      SoftwareId: VERSION_STRING,
+      FileType: options.FileType
     })
 
     const { Compressed, CompressionMethod, Content } = response.ApplicationResponse
 
     // Return decompressed buffer.
     if (Compressed) {
-      if (CompressionMethod !== 'RFC1952') {
+      if (CompressionMethod !== this.compressionMethod) {
         throw new Error(`Unsupported compression method ${CompressionMethod}`)
       }
 
@@ -195,6 +248,32 @@ export class Client extends SoapClient {
 
     // Retrun content if data is not compressed.
     return Buffer.from(Content, 'base64')
+  }
+
+  /**
+   * Upload file
+   *
+   * Encodes the given file Buffer in base64 and sends it to the file transfer service.
+   *
+   * @param file File to send as a Buffer
+   * @param options Some additional options for the file upload API, like ServiceId
+   */
+  async uploadFile(file: Buffer, options: UploadFileOptions): Promise<FileUploadResult> {
+    const result = await this.makeRequest('uploadFilein', {
+      '@xmlns': 'http://bxd.fi/xmldata/',
+      CustomerId: this.username,
+      Command: 'UploadFile',
+      Timestamp: this.formatTime(new Date()),
+      ServiceId: options.ServiceId,
+      Environment: this.environment,
+      UserFilename: options.UserFilename,
+      TargetId: options.TargetId,
+      SoftwareId: VERSION_STRING,
+      FileType: options.FileType,
+      Content: file.toString('base64')
+    })
+    const { Signature, ...rest } = result.ApplicationResponse
+    return rest
   }
 
   /**
@@ -296,7 +375,7 @@ export function parseResponseHeader(response: XMLElement): ResponseHeader {
 
   if (header) {
     for (const node of header as Array<any>) {
-      data[node.parentNode.nodeName] = node.data
+      data[node.parentNode.localName] = node.data
     }
   }
 

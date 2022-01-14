@@ -1,4 +1,4 @@
-import { OsuuspankkiCertService, Osuuspankki } from '../src/pankkiyhteys'
+import { Osuuspankki } from '../src/pankkiyhteys'
 import { Environment } from '../src/application'
 import TrustStore, { Key } from '../src/trust'
 import { readFile, createCertificate, forgeToKey } from './utils'
@@ -7,6 +7,7 @@ import { DOMParser } from 'xmldom'
 import { namespaces } from '../src/xml'
 import * as xpath from 'xpath'
 import * as path from 'path'
+import { OsuuspankkiCertService } from '../src/cert-services'
 
 describe('Test osuuspankki client', () => {
   let key!: Key

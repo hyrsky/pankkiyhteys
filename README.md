@@ -4,7 +4,10 @@
 
 This library is an implementation of Web Services API, a standardised solution used for automated communications between banks and corporate customers.
 
-Currently only [Osuuspankki](https://www.op.fi/) is supported.
+Currently only [Osuuspankki](https://www.op.fi/) is fully supported.
+
+Nordea client can be used with existing certificates to make normal Web Services API calls for listing, fetching and
+sending files. Certificate renewal isn't currently supported with the Nordea client. 
 
 For in depth technical documentation about Web Services [click here](https://www.finanssiala.fi/wp-content/uploads/2021/03/WebServices_Messages_v110_20200504.pdf).
 

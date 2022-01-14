@@ -2,38 +2,21 @@
  * @file Main entrypoint
  */
 
-import * as builder from 'xmlbuilder'
-import * as xpath from 'xpath'
 import createDebug from 'debug'
 
-import SoapClient from './soap'
-import TrustStore, { generateSigningRequest, Key } from './trust'
-import { X509ToCertificate } from './xml'
+import { generateSigningRequest, Key } from './trust'
 import * as app from './application'
+import * as builder from 'xmlbuilder'
 
-// Certificate authority
-import { OPPohjola, OPPohjolaTest } from './cacerts/OP-Pohjola'
+import { OsuuspankkiCertService, NordeaCertService } from './cert-services'
+import { X509ToCertificate } from './xml'
 import { pki } from 'node-forge'
 
-const debug = createDebug('pankkiyhteys')
+export const debug = createDebug('pankkiyhteys')
 
-interface FileDescriptor {
-  FileReference: string
-  TargetId: string
-  UserFilename: string
-  ParentFileReference: string
-  FileType: string
-  FileTimestamp: string
-  Status: 'NEW' | 'WFP' | 'DLD'
-}
+export { Key } from './trust'
 
-interface FileListResponse {
-  ApplicationResponse: {
-    FileDescriptors: FileDescriptor[]
-  }
-}
-
-interface CertApplicationRequest {
+export interface CertApplicationRequest {
   '@xmlns': string
   /** Customer id issued by provider. */
   CustomerId: string
@@ -51,103 +34,7 @@ interface CertApplicationRequest {
   TransferKey?: string
 }
 
-export { Key } from './trust'
-
-export class OsuuspankkiCertService extends SoapClient implements app.CertService {
-  username: string
-  environment: app.Environment
-
-  constructor(username: string, environment: app.Environment = app.Environment.PRODUCTION) {
-    super()
-
-    this.username = username
-    this.environment = environment
-  }
-
-  static getEndpoint(environment: app.Environment) {
-    return {
-      [app.Environment.PRODUCTION]: 'https://wsk.op.fi/services/OPCertificateService',
-      [app.Environment.TEST]: 'https://wsk.asiakastesti.op.fi/services/OPCertificateService'
-    }[environment]
-  }
-
-  getRootCA() {
-    return {
-      [app.Environment.PRODUCTION]: [OPPohjola],
-      [app.Environment.TEST]: [OPPohjolaTest]
-    }[this.environment]
-  }
-
-  async addIntermediaryCertificates(trustStore: TrustStore) {
-    debug('getServiceCertificates')
-
-    const request: CertApplicationRequest = {
-      '@xmlns': 'http://op.fi/mlp/xmldata/',
-      CustomerId: this.username,
-      Timestamp: this.formatTime(new Date()),
-      Environment: this.environment,
-      SoftwareId: app.VERSION_STRING,
-      Service: 'MATU'
-    }
-
-    // Convert application request xml.
-    const requestXml = builder
-      .create({ CertApplicationRequest: request })
-      .end({ pretty: true, indent: '  ' })
-
-    // Cert service envelopes are not signed.
-    const response = await this.makeSoapRequest(
-      OsuuspankkiCertService.getEndpoint(this.environment),
-      {
-        getServiceCertificatesin: {
-          '@xmlns': 'http://mlp.op.fi/OPCertificateService',
-          RequestHeader: {
-            SenderId: this.username,
-            RequestId: this.requestId(),
-            Timestamp: this.formatTime(new Date())
-          },
-          ApplicationRequest: Buffer.from(requestXml).toString('base64')
-        }
-      }
-    )
-
-    // Use preprocess callback that adds certificates to trust store.
-    // Otherwise we might not have intermediary certificates before signature validation.
-    await app.parseApplicationResponse(response, async (xml, document) => {
-      const certificates = xpath.select(
-        "/*/*[local-name()='Certificates']/*[local-name()='Certificate']",
-        document
-      )
-
-      for (const cert of certificates as Array<any>) {
-        if (cert) {
-          const format = xpath.select("./*[local-name()='CertificateFormat']/text()", cert, true)
-          const data = xpath.select("./*[local-name()='Certificate']/text()", cert, true)
-
-          // @todo: test format?
-
-          if (data) {
-            trustStore.addIntermediary(X509ToCertificate(data.toString()))
-          }
-        }
-      }
-
-      /**
-       * Service certificates is special case because we need to parse request
-       * before verifying the signature if intermediery certificate cache is not
-       * warm.
-       */
-
-      // Verify signature after intermediaries have been added to trust store.
-      // Prevent recursion loop with noLoading parameter.
-      await app.verifyApplicationRequestSignature(xml, document, trustStore, true)
-    })
-  }
-}
-
 export class Osuuspankki extends app.Client {
-  certService: OsuuspankkiCertService
-
   constructor(
     username: string,
     key: Key | undefined,
@@ -157,10 +44,9 @@ export class Osuuspankki extends app.Client {
     const certService = new OsuuspankkiCertService(username, environment)
     const endpoint = Osuuspankki.getEndpoint(environment)
     const bic = 'OKOYFIHH'
+    const compressionMethod = 'RFC1952'
 
-    super(username, key, language, bic, endpoint, certService, environment)
-
-    this.certService = certService
+    super(username, key, language, bic, endpoint, certService, environment, compressionMethod)
   }
 
   private static getEndpoint(environment: app.Environment) {
@@ -187,7 +73,7 @@ export class Osuuspankki extends app.Client {
     const csr = generateSigningRequest(privateKey, this.username, 'FI')
 
     const request: CertApplicationRequest = {
-      '@xmlns': 'http://op.fi/mlp/xmldata/',
+      '@xmlns': this.certService.applicationRequestXmlns,
       CustomerId: this.username,
       Timestamp: this.formatTime(new Date()),
       Environment: this.environment,
@@ -204,20 +90,17 @@ export class Osuuspankki extends app.Client {
     )
 
     // Cert service envelopes are not signed.
-    const response = await this.makeSoapRequest(
-      OsuuspankkiCertService.getEndpoint(this.environment),
-      {
-        getCertificatein: {
-          '@xmlns': 'http://mlp.op.fi/OPCertificateService',
-          RequestHeader: {
-            SenderId: this.username,
-            RequestId: this.requestId(),
-            Timestamp: this.formatTime(new Date())
-          },
-          ApplicationRequest: Buffer.from(requestXml).toString('base64')
-        }
+    const response = await this.makeSoapRequest(this.certService.getEndpoint(this.environment), {
+      getCertificatein: {
+        '@xmlns': this.certService.certificateRequestXmlns,
+        RequestHeader: {
+          SenderId: this.username,
+          RequestId: this.requestId(),
+          Timestamp: this.formatTime(new Date())
+        },
+        ApplicationRequest: Buffer.from(requestXml).toString('base64')
       }
-    )
+    })
 
     const applicationResponse = await app.parseApplicationResponse(
       response,
@@ -275,20 +158,17 @@ export class Osuuspankki extends app.Client {
       .end()
 
     // Cert service envelopes are not signed.
-    const response = await this.makeSoapRequest(
-      OsuuspankkiCertService.getEndpoint(this.environment),
-      {
-        getCertificatein: {
-          '@xmlns': 'http://mlp.op.fi/OPCertificateService',
-          RequestHeader: {
-            SenderId: this.username,
-            RequestId: this.requestId(),
-            Timestamp: this.formatTime(new Date())
-          },
-          ApplicationRequest: Buffer.from(requestXml).toString('base64')
-        }
+    const response = await this.makeSoapRequest(this.certService.getEndpoint(this.environment), {
+      getCertificatein: {
+        '@xmlns': 'http://mlp.op.fi/OPCertificateService',
+        RequestHeader: {
+          SenderId: this.username,
+          RequestId: this.requestId(),
+          Timestamp: this.formatTime(new Date())
+        },
+        ApplicationRequest: Buffer.from(requestXml).toString('base64')
       }
-    )
+    })
 
     const applicationResponse = await app.parseApplicationResponse(
       response,
@@ -309,5 +189,54 @@ export class Osuuspankki extends app.Client {
     this.key = new Key(privateKey, newCert)
 
     return newCert
+  }
+}
+
+// In getFileList / getFile, Nordea requires some options to be present.
+interface NordeaRequiredGetFileOptions {
+  FileType: string
+  TargetId: string
+}
+interface NordeaRequiredGetFileListOptions extends NordeaRequiredGetFileOptions {
+  Status: app.FileStatus
+}
+
+export class Nordea extends app.Client {
+  constructor(
+    username: string,
+    key: Key | undefined,
+    language: app.Language,
+    environment = app.Environment.TEST
+  ) {
+    const certService = new NordeaCertService()
+    const endpoint = Nordea.getEndpoint()
+    const bic = 'NDEAFIHH'
+    const compressionMethod = 'GZIP'
+
+    super(username, key, language, bic, endpoint, certService, environment, compressionMethod)
+
+    // Fetching itermediary certs is not implemented for the Nordea client,
+    // add root certs to intermediaries so that TrustStore.verifyCertificate
+    // will use those instead to validate response signatures.
+    for (const ca of certService.getRootCA()) {
+      this.trustStore.addIntermediary(pki.certificateFromPem(ca))
+    }
+  }
+
+  private static getEndpoint() {
+    return `https://filetransfer.nordea.com/services/CorporateFileService`
+  }
+
+  override getFileList(
+    options: app.GetFileListOptions & NordeaRequiredGetFileListOptions
+  ): Promise<app.FileDescriptor[]> {
+    return super.getFileList(options)
+  }
+
+  override getFile(
+    fileReference: string,
+    options: app.GetFileOptions & NordeaRequiredGetFileOptions
+  ): Promise<Buffer> {
+    return super.getFile(fileReference, options)
   }
 }
